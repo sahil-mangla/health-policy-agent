@@ -1,0 +1,52 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v10
+        with:
+          enable-cache: true
+
+      - name: Install dependencies
+        # No --all-extras: the `dense` extra (sentence-transformers/torch) is
+        # deliberately deferred (decoder/retrieve/dense.py is a stub blocked
+        # on the SPIKE-2 corpus, see docs/spikes/retrieval-stack.md) — pulling
+        # torch into every CI run would be pure waste until something
+        # actually imports it.
+        run: uv sync --locked --group dev
+
+      - name: Lint (ruff check)
+        run: uv run ruff check .
+
+      - name: Format check (ruff format)
+        run: uv run ruff format --check .
+
+      - name: Type check (mypy)
+        run: uv run mypy .
+
+      - name: Test (pytest)
+        # Tests that need a live local Ollama server or a cloud API key
+        # (tests/llm/test_ollama_client.py, tests/llm/test_gemini_client.py,
+        # tests/verify/test_entailment.py, tests/reason/test_ollama_drafter.py,
+        # the live half of tests/verify/test_decompose.py) are individually
+        # skip-guarded — they check reachability/key-presence themselves and
+        # skip cleanly here rather than failing, since neither a local model
+        # server nor a paid API key is available on a hosted runner. This
+        # means CI validates everything deterministic (schema, resolve,
+        # extraction, retrieval, intake, the PII guard, orchestrator wiring)
+        # but not live-model behavior — run those locally before relying on
+        # a change to them.
+        run: uv run pytest -q
+
+      - name: PII logging guard
+        run: uv run python scripts/check_no_document_text_in_logs.py
