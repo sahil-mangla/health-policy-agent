@@ -559,11 +559,37 @@ are not started (still blocked on SPIKE-2).*
 Hybrid retrieval over policy and CIS. Regulatory corpus stubbed.
 **DoD:** recall@k and contradiction recall reported on the eval set.
 
+*Status as of 2026-09-14: `decoder/retrieve/lexical_fts5.py`'s FTS5 lexical
+half is real and, as of this pass, split into two methods —
+`search_phrase()` (exact-phrase, the original SPIKE-3 behavior) and
+`search()` (OR-of-terms, ranked by BM25). The split exists because a real
+end-to-end test caught `search()`'s original always-phrase behavior
+returning zero results for a natural-language retrieval query whose words
+didn't literally co-occur in the target clause — phrase search alone was
+never going to serve free-text evidence retrieval. Dense retrieval
+(`dense.py`) and a `HybridRetriever` combining both are still not built,
+still blocked on SPIKE-2's corpus. No recall@k/contradiction-recall metrics
+yet — blocked on the eval set (§11/§15).*
+
 **M3 — Reasoning and verification.** *(The core.)*
 Draft generation, atomic decomposition, isolated span entailment with the
 deciding-words trap, code-executed derived claims.
 **DoD:** unsupported claim rate measured; the deciding-words trap demonstrably
 catches injected errors (write that test).
+
+*Status as of 2026-09-14: draft generation (`decoder/reason/ollama_drafter.py`)
+and isolated single-span entailment (`decoder/verify/entailment.py`) are
+both real, against a local Ollama model, with real end-to-end tests against
+the starter corpus — including a full retrieve → draft → verify → resolve
+chain for a nuanced field (co-payment %) that the deterministic extractor
+(§6, M1) couldn't safely handle. The deciding-words hallucination trap is
+demonstrably enforced (a fabricated-but-well-formatted quote is caught;
+an off-label verdict word like "CONFLICTS" defaults safely to NEUTRAL
+rather than being guessed at). Still not built: `decoder/verify/decompose.py`
+(multi-claim decomposition of a free-text draft — not needed yet since
+single-field extraction constructs one claim directly) and code-executed
+DERIVED-claim arithmetic. No unsupported-claim-rate metric yet — needs the
+eval set.*
 
 **M4 — Resolution and response.**
 `resolve/` as pure functions with exhaustive unit tests. Question generation derived

@@ -55,6 +55,18 @@ behind the same `Retriever` interface (`decoder/retrieve/interfaces.py`).
 - The FTS5 lexical path is fully implementable today with zero corpus
   dependency (`decoder/retrieve/lexical_fts5.py` — real code, not a stub, in
   this same commit).
+- **Update (2026-09-14), caught by a real end-to-end test:** the original
+  `search()` treated the *entire* query as one exact phrase, which is right
+  for re-finding a span by a known quote but wrong for retrieving evidence
+  from a free-text question — a real query ("co-payment percentage claim")
+  against a real clause ("...Co-payment of 5% applicable to claim
+  amount...") returned zero results, because the word "percentage" never
+  appears in the clause at all and phrase matching requires every query
+  word to co-occur verbatim. Split into `search()` (tokenized, OR-of-terms,
+  BM25-ranked — the actual retrieval method) and `search_phrase()` (the
+  original exact-phrase behavior, kept for verbatim-citation lookup). The
+  "must support exact-phrase lookup" requirement is satisfied by
+  `search_phrase()`; it was never meant to be the default retrieval mode.
 - The dense path (`decoder/retrieve/dense.py`) stays a stub: it needs an
   actual embedding model download and a real corpus to be meaningfully
   tested, and the corpus is blocked on SPIKE-2 (still not started — see
