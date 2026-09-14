@@ -10,6 +10,7 @@ are records of what was found, not mutable state.
 from __future__ import annotations
 
 from enum import StrEnum
+from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, model_validator
 
@@ -100,6 +101,28 @@ class ExtractedField(BaseModel):
         return self
 
 
+class DerivedOperation(BaseModel):
+    """The structured arithmetic backing a DERIVED AtomicClaim — §7.1:
+    "Claim 3 is arithmetic and is checked by code, not by a model."
+
+    Deliberately NOT populated by decoder.verify.decompose's free-text LLM
+    decomposition: tested by hand (2026-09-14) against a small local model
+    and found unreliable at extracting exact numeric operands from drafted
+    English (inconsistent splitting, dropped numbers) — precisely the
+    "wrong number with a correct-looking citation" failure §1 warns
+    against. A DERIVED claim's operation must instead be constructed by
+    code that already has the operand values on hand (e.g. a user-supplied
+    room tariff compared against an already-extracted numeric field), not
+    parsed out of a model's free-text draft.
+    """
+
+    model_config = ConfigDict(frozen=True)
+
+    operator: Literal["GREATER_THAN", "LESS_THAN", "GREATER_OR_EQUAL", "LESS_OR_EQUAL", "EQUAL"]
+    left_operand: float
+    right_operand: float
+
+
 class AtomicClaim(BaseModel):
     """One subject/predicate/value assertion that can be marked right or
     wrong on its own. See docs/HANDOVER.md §7.1.
@@ -123,6 +146,7 @@ class AtomicClaim(BaseModel):
     verbatim_match: bool
     required_inputs: list[RequiredInput] = []
     input_claim_ids: list[str] = []
+    derived_operation: DerivedOperation | None = None
 
 
 class EntailmentResult(BaseModel):
