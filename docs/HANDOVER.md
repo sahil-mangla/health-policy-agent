@@ -541,6 +541,20 @@ sub-limits.
 **DoD:** extraction metrics running in CI on the annotated set; every field has a
 span; `verbatim_match` computed; conflicting candidates surfaced not resolved.
 
+*Status as of 2026-09-14: classification and segmentation are real and
+verified against the starter corpus (`decoder/intake/classify.py`,
+`segment.py`) — a real 52-page policy wording segments into 424 precise
+clause-level spans with page+bbox provenance. Field extraction has a real
+deterministic (regex) implementation for the mechanically-safe fields only
+(UIN, explicit numeric room-rent caps — `decoder/extract/regex_extractor.py`),
+verified against all three real policy wordings, including a genuine
+compound-formula case (Arogya Sanjeevani's "2% of SI, capped at ₹5000/day").
+The remaining fields (waiting periods, co-pay, room-category eligibility,
+the carve-out list) need LLM-based structured extraction, not yet built —
+blocked on `decoder/reason`/`decoder/verify` being wired against
+`decoder/llm/ollama_client.py`. Extraction metrics/CI and the annotated set
+are not started (still blocked on SPIKE-2).*
+
 **M2 — Retrieval.**
 Hybrid retrieval over policy and CIS. Regulatory corpus stubbed.
 **DoD:** recall@k and contradiction recall reported on the eval set.
@@ -580,7 +594,7 @@ language". Build the analysis view first.
 | SPIKE-2 | Ombudsman corpus feasibility | M0, all evaluation | NOT STARTED |
 | SPIKE-3 | Retrieval stack | M2 | RESOLVED (2026-09-14) — see `/docs/spikes/retrieval-stack.md` |
 | SPIKE-4 | Second output language and when | Post-MVP | NOT STARTED |
-| SPIKE-5 | Model choice per role — drafting and verification need not be the same model, and the verifier arguably should be cheaper and dumber | M3 | NOT STARTED |
+| SPIKE-5 | Model choice per role — drafting and verification need not be the same model, and the verifier arguably should be cheaper and dumber | M3 | PARTIALLY RESOLVED (2026-09-14) — provider decided: local Ollama (`decoder/llm/ollama_client.py`), no API key/cloud dependency. Only `qwen2.5-coder:7b` is currently pulled; which model(s) to use per role (drafter vs. verifier) is still open. |
 | SPIKE-6 | Final policy schema beyond the hero fields | M1 extension | NOT STARTED |
 | SPIKE-7 | Annotation protocol and inter-annotator agreement for the eval set | M0 | NOT STARTED |
 
