@@ -93,6 +93,37 @@ Annexure-6 (or a subsequent circular explicitly addressing proportionate
 deduction) has been checked. This is the single concrete follow-up that would
 let this spike move from `PARTIALLY RESOLVED` to `RESOLVED`.
 
+**Follow-up attempt, 2026-09-14 (second pass) — still not accessible.** Tried,
+and hit dead ends on, all of the following before giving up rather than
+guessing:
+- The already-downloaded 17-page master circular PDF itself ends at the
+  "Repeal of the Guidelines/Circulars" clause without ever including
+  Annexure-6's content — it is not appended to this file.
+- Re-fetching the IRDAI document-detail page for this circular
+  (`irdai.gov.in/document-detail?documentId=393937`) resolved to an
+  unrelated, differently-numbered 2020 exposure draft, not an annexure list.
+- Targeted web searches for the annexure's contents (including trying to
+  match it against `IRDAI/HLT/REG/CIR/151/06/2020` and the 2016 base
+  guideline `IRDA/HLT/REG/CIR/150/07/2016` by name) returned no page that
+  reproduces the list.
+- One plausible intermediate document was found —
+  **IRDAI/HLT/REG/CIR/193/07/2020** ("Master Circular on Standardization of
+  Health Insurance Products," 22 July 2020, 155 pages) — described in search
+  results as consolidating "all the Guidelines issued up to 31st March,
+  2020." That cutoff **predates** the 11 June 2020 proportionate-deduction
+  circular, so it could not have absorbed it; this document was not fetched
+  in full (155 pages) since it can't resolve the question either way, but is
+  noted here in case a future pass wants to check whether it says anything
+  about 151/06/2020's status regardless.
+
+**Conclusion: Annexure-6's actual text appears not to be indexed anywhere
+this session's web search reached.** Closing this spike for real most likely
+requires either downloading the master circular PDF directly from
+`irdai.gov.in` with a tool that can see attachments/annexures a generic
+web-fetch might miss, or contacting IRDAI/a compliance source directly. Until
+then this stays `PARTIALLY RESOLVED` — treat the floor exclusions above as
+the best-evidence current rule, not a certainty.
+
 ## Secondary-source contradiction (recorded because it is itself instructive)
 
 Several consumer-facing web sources were checked before the primary documents
