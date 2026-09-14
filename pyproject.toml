@@ -1,0 +1,50 @@
+[project]
+name = "policy-agent"
+version = "0.1.0"
+description = "Indian Health Insurance Policy Decoder"
+requires-python = ">=3.11"
+dependencies = [
+    "pydantic>=2.7",
+]
+
+[project.optional-dependencies]
+# Deferred: no embedding calls happen yet (dense retrieval is blocked on the
+# SPIKE-2 corpus). Kept out of the default install so `uv sync` stays fast —
+# sentence-transformers pulls in torch. Install with `uv sync --extra dense`
+# once decoder/retrieve/dense.py is implemented for real.
+dense = [
+    "sentence-transformers>=3.0",
+    "numpy>=1.26",
+]
+
+[dependency-groups]
+dev = [
+    "pytest>=8.0",
+    "ruff>=0.6",
+    "mypy>=1.10",
+]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+# docs/HANDOVER.md must stay a verbatim copy of the source spec (including
+# its embedded pseudocode blocks) — never auto-formatted.
+extend-exclude = ["docs"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "SIM"]
+
+[tool.mypy]
+python_version = "3.11"
+strict = true
+plugins = ["pydantic.mypy"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
+[tool.hatch.build.targets.wheel]
+packages = ["decoder"]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
