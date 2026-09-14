@@ -6,10 +6,16 @@ own shell before running these."""
 from __future__ import annotations
 
 import os
+from unittest.mock import MagicMock
 
 import pytest
+from google.genai import errors
 
-from decoder.llm.gemini_client import GeminiAPIKeyMissingError, GeminiLLMClient
+from decoder.llm.gemini_client import (
+    GeminiAPIKeyMissingError,
+    GeminiLLMClient,
+    GeminiRateLimitError,
+)
 
 _MODEL = "gemini-3.6-flash"
 
@@ -23,6 +29,68 @@ def test_missing_api_key_raises_clear_error(monkeypatch: pytest.MonkeyPatch) -> 
     monkeypatch.delenv("GOOGLE_API_KEY", raising=False)
     with pytest.raises(GeminiAPIKeyMissingError):
         GeminiLLMClient()
+
+
+class TestRetryBehavior:
+    """Deterministic tests for the retry/rate-limit logic — no live API
+    call, no dependence on a real transient failure actually occurring.
+    Motivated by two real 503s observed in one session's worth of manual
+    testing, plus a user-flagged free-tier rate-limit concern (2026-09-14)."""
+
+    def _client_with_fake_key(self, monkeypatch: pytest.MonkeyPatch) -> GeminiLLMClient:
+        monkeypatch.setenv("GEMINI_API_KEY", "fake-key-for-unit-tests")
+        monkeypatch.setattr("decoder.llm.gemini_client.time.sleep", lambda _seconds: None)
+        return GeminiLLMClient()
+
+    def test_transient_server_error_is_retried_and_recovers(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        client = self._client_with_fake_key(monkeypatch)
+        success_response = MagicMock(text="recovered")
+        mock_generate = MagicMock(
+            side_effect=[
+                errors.ServerError(503, {"error": {"message": "high demand"}}),
+                success_response,
+            ]
+        )
+        monkeypatch.setattr(client._client.models, "generate_content", mock_generate)
+        result = client.generate(prompt="p", system="s", model=_MODEL)
+        assert result == "recovered"
+        assert mock_generate.call_count == 2
+
+    def test_server_error_exhausts_retries_and_raises(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        client = self._client_with_fake_key(monkeypatch)
+        mock_generate = MagicMock(
+            side_effect=errors.ServerError(503, {"error": {"message": "high demand"}})
+        )
+        monkeypatch.setattr(client._client.models, "generate_content", mock_generate)
+        with pytest.raises(errors.ServerError):
+            client.generate(prompt="p", system="s", model=_MODEL)
+        assert mock_generate.call_count == 3  # _MAX_TRANSIENT_RETRIES
+
+    def test_rate_limit_raises_immediately_without_retrying(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        client = self._client_with_fake_key(monkeypatch)
+        mock_generate = MagicMock(
+            side_effect=errors.ClientError(429, {"error": {"message": "quota exceeded"}})
+        )
+        monkeypatch.setattr(client._client.models, "generate_content", mock_generate)
+        with pytest.raises(GeminiRateLimitError):
+            client.generate(prompt="p", system="s", model=_MODEL)
+        assert mock_generate.call_count == 1  # never retried
+
+    def test_other_client_error_is_not_retried(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        client = self._client_with_fake_key(monkeypatch)
+        mock_generate = MagicMock(
+            side_effect=errors.ClientError(404, {"error": {"message": "model not found"}})
+        )
+        monkeypatch.setattr(client._client.models, "generate_content", mock_generate)
+        with pytest.raises(errors.ClientError):
+            client.generate(prompt="p", system="s", model=_MODEL)
+        assert mock_generate.call_count == 1
 
 
 @pytest.mark.skipif(not _has_api_key(), reason="GEMINI_API_KEY / GOOGLE_API_KEY not set")
