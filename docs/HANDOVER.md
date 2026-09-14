@@ -588,19 +588,38 @@ deciding-words trap, code-executed derived claims.
 **DoD:** unsupported claim rate measured; the deciding-words trap demonstrably
 catches injected errors (write that test).
 
-*Status as of 2026-09-14: draft generation (`decoder/reason/ollama_drafter.py`)
-and isolated single-span entailment (`decoder/verify/entailment.py`) are
-both real, against a local Ollama model, with real end-to-end tests against
-the starter corpus — including a full retrieve → draft → verify → resolve
-chain for a nuanced field (co-payment %) that the deterministic extractor
-(§6, M1) couldn't safely handle. The deciding-words hallucination trap is
-demonstrably enforced (a fabricated-but-well-formatted quote is caught;
-an off-label verdict word like "CONFLICTS" defaults safely to NEUTRAL
-rather than being guessed at). Still not built: `decoder/verify/decompose.py`
-(multi-claim decomposition of a free-text draft — not needed yet since
-single-field extraction constructs one claim directly) and code-executed
-DERIVED-claim arithmetic. No unsupported-claim-rate metric yet — needs the
-eval set.*
+*Status as of 2026-09-14: `decoder/verify` is now complete. Draft generation
+(`decoder/reason/ollama_drafter.py`), isolated single-span entailment
+(`decoder/verify/entailment.py`), multi-claim decomposition
+(`decoder/verify/decompose.py`), and code-executed DERIVED-claim arithmetic
+(`decoder/verify/numeric_check.py`) are all real, with tests against the
+starter corpus and (for decompose/entailment) a live local model. Full
+retrieve → draft → verify → resolve chains have been run end-to-end for
+both a nuanced document field (co-payment %) and the hero scenario's own
+DERIVED comparison (₹8,000/day room vs. ₹5,000/day limit). The
+deciding-words hallucination trap is demonstrably enforced (a fabricated
+quote is caught; an off-label verdict word like "CONFLICTS" defaults
+safely to NEUTRAL). Decompose deliberately does not attempt to extract
+DERIVED-claim numeric operands from free text — tested by hand and found
+unreliable — so a DERIVED claim's `derived_operation` must be constructed
+by code that already has the real operand values, never parsed from a
+model's draft (`decoder.schema.DerivedOperation`'s docstring has the
+detail).
+
+**A real "confident and wrong" instance was caught by the test suite
+itself** (§12's headline harm case), not hypothesized: at Ollama's default
+sampling temperature, `OllamaEntailer` intermittently returned SUPPORTS for
+a fabricated co-payment percentage checked against a real clause stating
+the correct one — the model's own quoted text contained the right number,
+but its verdict ignored it. `decoder/llm/ollama_client.py` now defaults to
+`temperature=0`, confirmed by hand to reproduce the correct verdict
+consistently (15/15 trials) where the default temperature was not. This is
+recorded here rather than quietly patched, because it's a concrete,
+measured data point for exactly the metric §12 asks for — not proof the
+failure mode is fully closed, only that this one reproduction is fixed.
+
+No unsupported-claim-rate metric yet — needs the eval set (SPIKE-2,
+§11/§15).*
 
 **M4 — Resolution and response.**
 `resolve/` as pure functions with exhaustive unit tests. Question generation derived

@@ -13,6 +13,18 @@ Model choice is a runtime parameter (`generate`'s `model` argument), not
 hardcoded here — SPIKE-5 (docs/HANDOVER.md §15) is explicit that the drafter
 and verifier need not share a model. Whatever is passed must already be
 pulled locally (`ollama pull <model>`); this client does not pull models.
+
+Defaults to temperature=0 (deterministic/greedy decoding). Found necessary,
+not just cautious, by a real failure: entailment's default-temperature runs
+against a real corpus span occasionally returned SUPPORTS for a claim the
+passage actually contradicts (a wrong co-payment percentage checked against
+a passage plainly stating the real one — the model's own quoted text even
+contained the correct figure, but its verdict ignored it). Confirmed by
+hand (2026-09-14) that temperature=0 reproduces the correct verdict
+consistently across repeated runs where the default temperature did not.
+A caller that genuinely wants sampling variation (e.g. exploring multiple
+drafts) can override via the `temperature` constructor argument, but no
+current caller in this codebase does.
 """
 
 from __future__ import annotations
@@ -39,13 +51,21 @@ class OllamaLLMClient(LLMClient):
         self,
         base_url: str = _DEFAULT_BASE_URL,
         timeout_seconds: int = _DEFAULT_TIMEOUT_SECONDS,
+        temperature: float = 0.0,
     ) -> None:
         self._base_url = base_url.rstrip("/")
         self._timeout_seconds = timeout_seconds
+        self._temperature = temperature
 
     def generate(self, prompt: str, system: str, model: str) -> str:
         payload = json.dumps(
-            {"model": model, "prompt": prompt, "system": system, "stream": False}
+            {
+                "model": model,
+                "prompt": prompt,
+                "system": system,
+                "stream": False,
+                "options": {"temperature": self._temperature},
+            }
         ).encode("utf-8")
         request = urllib.request.Request(
             f"{self._base_url}/api/generate",

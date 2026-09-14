@@ -69,16 +69,26 @@ def test_correct_claim_against_real_span_is_supports(arogya_sanjeevani_spans: li
     assert result.deciding_quote in span.text
 
 
-def test_wrong_numeric_claim_against_real_span_is_not_supports(
+def test_wrong_numeric_claim_against_real_span_is_never_supports(
     arogya_sanjeevani_spans: list[Span],
 ) -> None:
+    # This is a real regression test, not a defensively-written hypothetical:
+    # at the default (non-zero) Ollama temperature, this exact case
+    # intermittently returned SUPPORTS for a claim the passage actually
+    # contradicts — the model's own quoted text contained the correct 5%
+    # figure, but its verdict ignored it and confirmed a fabricated 20%.
+    # That is the "confident and wrong" harm case docs/HANDOVER.md §12
+    # weighs most heavily. Fixed by defaulting OllamaLLMClient to
+    # temperature=0 (see its module docstring) — confirmed by hand to be
+    # consistently correct across repeated runs where the default
+    # temperature was not. Run several trials here, not one, since a single
+    # passing run is exactly what let this slip through originally.
     span = _copay_span(arogya_sanjeevani_spans)
     claim = _claim("the policy", "applies a co-payment of", "20% to every claim")
     entailer = OllamaEntailer(OllamaLLMClient(), model=_MODEL)
-    result = entailer.check(claim, span)
-    # Must not be falsely SUPPORTS — CONTRADICTS or NEUTRAL are both
-    # acceptable "not wrongly confirmed" outcomes.
-    assert result.verdict != EntailmentVerdict.SUPPORTS
+    for _ in range(5):
+        result = entailer.check(claim, span)
+        assert result.verdict != EntailmentVerdict.SUPPORTS
 
 
 def test_unrelated_claim_against_real_span_is_neutral(arogya_sanjeevani_spans: list[Span]) -> None:
