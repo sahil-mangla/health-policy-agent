@@ -430,10 +430,15 @@ This is effectively expert-labelled data that already exists.
 > Output: `/docs/corpus/ombudsman-feasibility.md` with a sample of 20 awards
 > hand-classified by usable / not usable and why.
 >
-> **NOT STARTED.** Explicitly out of scope for the 2026-09-14 scaffolding session —
-> the project owner has no ombudsman data or real policy/CIS documents yet. This
-> still gates the entire evaluation plan (§12/§13) and must be picked up before M0
-> can be marked done.
+> **PARTIALLY RESOLVED (2026-09-14).** See `/docs/corpus/ombudsman-feasibility.md`.
+> A real, bulk-downloadable archive was found (an unlisted directory on
+> cioins.co.in, `GIC/mediclaim/Mediclaim-Book*.pdf` and siblings) — clause-level
+> fact patterns confirmed, including a complete numbers-and-all worked example
+> of this project's own hero scenario. Still open: no reuse license found on
+> the source site (do not redistribute or build the eval corpus on this at
+> scale until that's resolved with the project owner), and only 8 of the
+> required 20 sample awards have been hand-classified so far. This still gates
+> the evaluation plan (§12/§13) and M0 is not done until both are closed.
 
 **B. Real policy wordings.** Insurers publish policy wordings and CIS documents.
 Determine what may be used for development and evaluation.
@@ -524,15 +529,21 @@ Run SPIKE-2 (ombudsman), SPIKE-1 (proportionate deduction regulation), SPIKE-3
 **DoD:** three spike memos written and dated; corpus inventoried; 30 annotated eval
 cases exist, of which ≥8 are correctly-abstain cases.
 
-*Status as of 2026-09-14: SPIKE-1 partially resolved, SPIKE-3 resolved, repo
-scaffold committed. A starter corpus (3 real policy+CIS pairs from HDFC ERGO;
-see `corpus/README.md`) has been acquired via IRDAI-mandated public insurer
-disclosures — short of the ≥15-pair target and not yet diversified across
-insurers or room-rent structures. SPIKE-2 and the annotated eval set are still
-outstanding — M0 is not yet done. M1 (intake/extraction) work has started
-against the starter corpus ahead of M0's full completion, since the corpus is
-the actual bottleneck and M1's deterministic components don't depend on
-SPIKE-2 or the eval set.*
+*Status as of 2026-09-14: SPIKE-1 and SPIKE-2 both partially resolved,
+SPIKE-3 resolved, repo scaffold committed. The corpus has grown to 5 real
+policy+CIS/CIS-bundle pairs across 3 insurers (HDFC ERGO, Star Health,
+Bajaj Allianz — see `corpus/README.md`), verified to cover 3 of the 4
+hero-scenario room-rent bases (compound %+flat cap, pure %-of-SI, no cap)
+— still short of the ≥15-pair target, still missing room-category
+eligibility and a pure flat-₹/day cap. A real ombudsman award archive has
+been found for SPIKE-2 (`docs/corpus/ombudsman-feasibility.md`) with one
+sample book pulled locally, including a complete worked example of the
+hero scenario — but its reuse license is unresolved, so it has not been
+built into the annotated eval set. M0 is not yet done: the corpus and
+eval-set targets remain open, and the licensing question needs the
+project owner's input. M1 (intake/extraction) and M3 (reasoning/
+verification) work has proceeded ahead of M0's full completion regardless,
+since neither depends on SPIKE-2 or the eval set.*
 
 **M1 — Intake and extraction with provenance.**
 Classification (§9.1), segmentation, span store, field extraction for the hero
@@ -617,7 +628,7 @@ language". Build the analysis view first.
 | ID | Question | Gates | Status |
 |---|---|---|---|
 | SPIKE-1 | IRDAI position on proportionate deduction, with dates | M5 | PARTIALLY RESOLVED (2026-09-14) — see `/docs/regulatory/proportionate-deduction.md` |
-| SPIKE-2 | Ombudsman corpus feasibility | M0, all evaluation | NOT STARTED |
+| SPIKE-2 | Ombudsman corpus feasibility | M0, all evaluation | PARTIALLY RESOLVED (2026-09-14) — see `/docs/corpus/ombudsman-feasibility.md`; archive found, licensing unresolved |
 | SPIKE-3 | Retrieval stack | M2 | RESOLVED (2026-09-14) — see `/docs/spikes/retrieval-stack.md` |
 | SPIKE-4 | Second output language and when | Post-MVP | NOT STARTED |
 | SPIKE-5 | Model choice per role — drafting and verification need not be the same model, and the verifier arguably should be cheaper and dumber | M3 | PARTIALLY RESOLVED (2026-09-14) — provider decided: local Ollama (`decoder/llm/ollama_client.py`), no API key/cloud dependency. Only `qwen2.5-coder:7b` is currently pulled; which model(s) to use per role (drafter vs. verifier) is still open. |
