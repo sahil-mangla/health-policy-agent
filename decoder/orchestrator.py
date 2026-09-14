@@ -28,7 +28,7 @@ def answer_query(
     raise NotImplementedError(
         "TODO(M5 — Hero scenario end to end): full pipeline not runnable "
         "until decoder.retrieve.dense (blocked on SPIKE-2 corpus), "
-        "decoder.reason, decoder.verify.entailment, and "
-        "decoder.llm.anthropic_client are implemented for real; see "
-        "docs/HANDOVER.md §5 and §14."
+        "decoder.reason, and decoder.verify.entailment are implemented for "
+        "real against decoder.llm.ollama_client.OllamaLLMClient (a local "
+        "Ollama server, no API key); see docs/HANDOVER.md §5 and §14."
     )
