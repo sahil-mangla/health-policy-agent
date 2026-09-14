@@ -649,7 +649,7 @@ language". Build the analysis view first.
 | SPIKE-1 | IRDAI position on proportionate deduction, with dates | M5 | PARTIALLY RESOLVED (2026-09-14) — see `/docs/regulatory/proportionate-deduction.md` |
 | SPIKE-2 | Ombudsman corpus feasibility | M0, all evaluation | PARTIALLY RESOLVED (2026-09-14) — see `/docs/corpus/ombudsman-feasibility.md`; archive found, licensing unresolved |
 | SPIKE-3 | Retrieval stack | M2 | RESOLVED (2026-09-14) — see `/docs/spikes/retrieval-stack.md` |
-| SPIKE-4 | Second output language and when | Post-MVP | NOT STARTED |
+| SPIKE-4 | Second output language and when | Post-MVP | PARTIALLY RESOLVED (2026-09-14) — see `/docs/spikes/translation-language.md`. Language (Hindi) and mechanism (translate only the final verified answer text, via Gemini — tested against Ollama and found clearly better for this role) are decided; "when" (which milestone ships it in the UI) is still open since no frontend exists yet. |
 | SPIKE-5 | Model choice per role — drafting and verification need not be the same model, and the verifier arguably should be cheaper and dumber | M3 | PARTIALLY RESOLVED (2026-09-14) — `decoder/llm/interface.py`'s `LLMClient` now has two real, working implementations (`ollama_client.py`, local, no key; `gemini_client.py`, cloud, needs `GEMINI_API_KEY`) plus two documented stubs (`anthropic_client.py`, `openai_client.py`, unwired pending keys) — any package can use any provider per role without changing its own code. Which specific model(s) to use per role (drafter vs. verifier, and which provider) is still open. |
 | SPIKE-6 | Final policy schema beyond the hero fields | M1 extension | NOT STARTED |
 | SPIKE-7 | Annotation protocol and inter-annotator agreement for the eval set | M0 | NOT STARTED |
