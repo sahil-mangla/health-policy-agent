@@ -525,8 +525,14 @@ Run SPIKE-2 (ombudsman), SPIKE-1 (proportionate deduction regulation), SPIKE-3
 cases exist, of which ≥8 are correctly-abstain cases.
 
 *Status as of 2026-09-14: SPIKE-1 partially resolved, SPIKE-3 resolved, repo
-scaffold committed. SPIKE-2, the real-document corpus, and the annotated eval set
-are all still outstanding — M0 is not yet done.*
+scaffold committed. A starter corpus (3 real policy+CIS pairs from HDFC ERGO;
+see `corpus/README.md`) has been acquired via IRDAI-mandated public insurer
+disclosures — short of the ≥15-pair target and not yet diversified across
+insurers or room-rent structures. SPIKE-2 and the annotated eval set are still
+outstanding — M0 is not yet done. M1 (intake/extraction) work has started
+against the starter corpus ahead of M0's full completion, since the corpus is
+the actual bottleneck and M1's deterministic components don't depend on
+SPIKE-2 or the eval set.*
 
 **M1 — Intake and extraction with provenance.**
 Classification (§9.1), segmentation, span store, field extraction for the hero
