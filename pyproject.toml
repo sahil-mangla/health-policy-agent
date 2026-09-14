@@ -5,6 +5,7 @@ description = "Indian Health Insurance Policy Decoder"
 requires-python = ">=3.11"
 dependencies = [
     "pydantic>=2.7",
+    "pdfplumber>=0.11",
 ]
 
 [project.optional-dependencies]
