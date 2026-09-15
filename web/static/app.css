@@ -1,0 +1,286 @@
+/* Structured analysis view (docs/HANDOVER.md §14), not a chat window.
+   The five support states are the load-bearing visual distinction, so
+   they get the only saturated colour on the page. */
+
+:root {
+  --ink: #16202c;
+  --ink-soft: #5a6b7d;
+  --line: #dde4ec;
+  --bg: #f4f6f9;
+  --surface: #ffffff;
+  --accent: #1d4ed8;
+
+  --supported: #0f7b4f;
+  --supported-bg: #e6f5ee;
+  --confirm: #9a6700;
+  --confirm-bg: #fdf4e0;
+  --info: #1f5fa8;
+  --info-bg: #e8f1fb;
+  --absent: #5a6b7d;
+  --absent-bg: #eef1f5;
+  --conflict: #b3261e;
+  --conflict-bg: #fdecea;
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--ink);
+  font: 16px/1.55 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+}
+
+.masthead {
+  padding: 34px 24px 20px;
+  max-width: 860px;
+  margin: 0 auto;
+}
+.masthead h1 { margin: 0 0 6px; font-size: 26px; letter-spacing: -0.02em; }
+.tagline { margin: 0; color: var(--ink-soft); max-width: 60ch; }
+
+main {
+  max-width: 860px;
+  margin: 0 auto;
+  padding: 0 24px 72px;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+.panel {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 20px 22px;
+}
+.panel h2 { margin: 0 0 4px; font-size: 17px; letter-spacing: -0.01em; }
+.panel-sub { margin: 0 0 16px; color: var(--ink-soft); font-size: 14px; }
+
+.field { display: block; margin-bottom: 14px; }
+.field-label {
+  display: block;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--ink-soft);
+  margin-bottom: 6px;
+}
+select, textarea {
+  width: 100%;
+  font: inherit;
+  color: inherit;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface);
+}
+textarea { resize: vertical; }
+select:focus-visible, textarea:focus-visible, button:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.doc-note {
+  margin: -8px 0 16px;
+  font-size: 13px;
+  color: var(--ink-soft);
+  font-style: italic;
+}
+
+.examples { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 18px; }
+.example-chip {
+  font: inherit;
+  font-size: 13px;
+  padding: 6px 12px;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  background: var(--bg);
+  color: var(--ink-soft);
+  cursor: pointer;
+}
+.example-chip:hover { border-color: var(--accent); color: var(--accent); }
+
+button.primary {
+  font: inherit;
+  font-weight: 600;
+  background: var(--accent);
+  color: #fff;
+  border: 0;
+  border-radius: 8px;
+  padding: 11px 22px;
+  cursor: pointer;
+}
+button.primary:disabled { opacity: 0.55; cursor: progress; }
+
+/* Progress: reported by the pipeline, never invented here. */
+.progress-row { display: flex; align-items: center; gap: 10px; font-weight: 500; }
+.progress-note { margin: 10px 0 0; font-size: 13px; color: var(--ink-soft); }
+.progress-track {
+  margin-top: 12px;
+  height: 6px;
+  background: var(--bg);
+  border-radius: 999px;
+  overflow: hidden;
+}
+.progress-bar {
+  height: 100%;
+  width: 0;
+  background: var(--accent);
+  border-radius: 999px;
+  transition: width 240ms ease;
+}
+.spinner {
+  width: 15px; height: 15px;
+  border: 2px solid var(--line);
+  border-top-color: var(--accent);
+  border-radius: 50%;
+  animation: spin 720ms linear infinite;
+  flex: none;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) {
+  .spinner { animation-duration: 2.4s; }
+  .progress-bar { transition: none; }
+}
+
+.error-panel { border-color: var(--conflict); background: var(--conflict-bg); color: var(--conflict); }
+
+/* State chips carry §8's labels verbatim. */
+.state-chip {
+  display: inline-block;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.01em;
+  padding: 4px 10px;
+  border-radius: 999px;
+  white-space: nowrap;
+}
+.state-WELL_SUPPORTED { color: var(--supported); background: var(--supported-bg); }
+.state-NEEDS_CONFIRMATION { color: var(--confirm); background: var(--confirm-bg); }
+.state-NEEDS_INFORMATION { color: var(--info); background: var(--info-bg); }
+.state-INSUFFICIENT_EVIDENCE { color: var(--absent); background: var(--absent-bg); }
+.state-CONFLICTING { color: var(--conflict); background: var(--conflict-bg); }
+
+.verdict-line { display: flex; align-items: center; gap: 12px; margin: 10px 0 0; flex-wrap: wrap; }
+.verdict-explainer { color: var(--ink-soft); font-size: 14px; }
+
+.claims { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 10px; }
+.claim {
+  border: 1px solid var(--line);
+  border-left: 4px solid var(--line);
+  border-radius: 10px;
+  overflow: hidden;
+}
+.claim.s-WELL_SUPPORTED { border-left-color: var(--supported); }
+.claim.s-NEEDS_CONFIRMATION { border-left-color: var(--confirm); }
+.claim.s-NEEDS_INFORMATION { border-left-color: var(--info); }
+.claim.s-INSUFFICIENT_EVIDENCE { border-left-color: var(--absent); }
+.claim.s-CONFLICTING { border-left-color: var(--conflict); }
+
+.claim-head {
+  width: 100%;
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 14px 16px;
+  background: var(--surface);
+  border: 0;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.claim-head:hover { background: #fbfcfe; }
+.claim-text { flex: 1; }
+.disclosure { color: var(--ink-soft); flex: none; font-size: 13px; }
+
+.claim-body {
+  padding: 4px 16px 16px;
+  border-top: 1px solid var(--line);
+  background: #fcfdfe;
+}
+.why {
+  margin: 12px 0;
+  font-size: 14px;
+  color: var(--ink-soft);
+}
+
+.evidence { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+.evidence-item {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 10px 12px;
+  background: var(--surface);
+}
+.evidence-item.contradicts { border-color: #f3c7c3; background: var(--conflict-bg); }
+.evidence-verdict {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--supported);
+}
+.evidence-item.contradicts .evidence-verdict { color: var(--conflict); }
+.evidence-quote {
+  margin: 6px 0 8px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 13px;
+  line-height: 1.5;
+}
+.evidence-source {
+  font: inherit;
+  font-size: 12px;
+  color: var(--accent);
+  background: none;
+  border: 0;
+  padding: 0;
+  cursor: pointer;
+  text-decoration: underline;
+}
+
+.questions, .missing-inputs { margin: 0; padding-left: 20px; display: flex; flex-direction: column; gap: 8px; }
+.questions li, .missing-inputs li { font-size: 15px; }
+.missing-inputs .input-name { font-weight: 600; }
+
+.evidence-dialog {
+  border: 0;
+  border-radius: 12px;
+  padding: 0;
+  width: min(880px, 94vw);
+  max-height: 90vh;
+  overflow: auto;
+  box-shadow: 0 24px 60px rgba(16, 32, 48, 0.28);
+}
+.evidence-dialog::backdrop { background: rgba(16, 32, 44, 0.55); }
+/* Head and quote pin together: the quote is what the reader came to check,
+   so it stays on screen while the page image scrolls to the highlight. */
+.dialog-sticky {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  background: var(--surface);
+  border-bottom: 1px solid var(--line);
+}
+.dialog-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 16px;
+  padding: 18px 20px 12px;
+  background: var(--surface);
+}
+.dialog-head h3 { margin: 0; font-size: 16px; }
+.dialog-source { margin: 4px 0 0; font-size: 13px; color: var(--ink-soft); }
+.icon-button {
+  font: inherit; font-size: 24px; line-height: 1;
+  background: none; border: 0; cursor: pointer; color: var(--ink-soft);
+}
+.dialog-quote {
+  margin: 0;
+  padding: 14px 20px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 13px;
+  background: var(--confirm-bg);
+  border-left: 4px solid var(--confirm);
+}
+.page-image-wrap { padding: 16px 20px 20px; background: var(--bg); }
+#page-image { width: 100%; display: block; border: 1px solid var(--line); border-radius: 6px; background: #fff; }

@@ -23,7 +23,7 @@ when M2 lands; nothing else in this module changes.
 
 from __future__ import annotations
 
-from collections.abc import Mapping, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 
 from decoder.intake.classify import HeuristicDocumentClassifier
@@ -78,6 +78,22 @@ class LoadedDocument:
     spans: list[Span]
 
 
+@dataclass(frozen=True)
+class Progress:
+    """Where the pipeline has got to. Reported rather than estimated: a full
+    run is dominated by claims x top_k entailment calls and takes tens of
+    seconds, so a caller showing a progress indicator would otherwise have
+    to invent one, and an invented progress bar is its own small lie."""
+
+    stage: str
+    detail: str = ""
+    completed: int = 0
+    total: int = 0
+
+
+ProgressCallback = Callable[[Progress], None]
+
+
 def load_document(
     doc_id: str,
     raw_bytes: bytes,
@@ -123,6 +139,7 @@ class PolicyDecoder:
         situation: str,
         provided_inputs: Mapping[str, object] | None = None,
         derived_claims: Sequence[AtomicClaim] = (),
+        on_progress: ProgressCallback | None = None,
     ) -> Answer:
         """`derived_claims` are DERIVED AtomicClaims built by code that
         already holds the real operand values (e.g. an extracted room-rent
@@ -130,30 +147,39 @@ class PolicyDecoder:
         parsed out of the draft — see decoder.schema.DerivedOperation for
         why — and are verified arithmetically rather than by entailment.
         """
+        report = on_progress or _ignore_progress
         provided = dict(provided_inputs or {})
+
+        report(Progress("retrieving", "Searching your documents"))
         evidence = self._retrieve(documents, situation)
+
+        report(Progress("drafting", "Reading the clauses found"))
         draft = self._drafter.draft(situation, evidence)
+
+        report(Progress("decomposing", "Splitting into checkable claims"))
         claims = self._decomposer.decompose(draft)
 
         # Non-DERIVED first, so a DERIVED claim's inputs already have
         # resolved states by the time it needs them (§8's DERIVED branch,
         # and decoder.schema.AtomicClaim's note on input_claim_ids).
-        resolved: list[ResolvedClaim] = [
-            self._resolve_claim(claim, evidence, provided, {})
-            for claim in claims
-            if claim.claim_class != ClaimClass.DERIVED
-        ]
+        plain = [c for c in claims if c.claim_class != ClaimClass.DERIVED]
+        derived = [c for c in claims if c.claim_class == ClaimClass.DERIVED]
+        total = len(plain) + len(derived) + len(derived_claims)
+
+        resolved: list[ResolvedClaim] = []
+        for claim in plain:
+            report(Progress("verifying", "Checking each claim", len(resolved), total))
+            resolved.append(self._resolve_claim(claim, evidence, provided, {}))
         states_by_claim_id = {r.claim.id: r.state for r in resolved}
 
-        derived = [c for c in claims if c.claim_class == ClaimClass.DERIVED]
         for claim in [*derived, *derived_claims]:
+            report(Progress("verifying", "Checking each claim", len(resolved), total))
             resolved.append(self._resolve_claim(claim, evidence, provided, states_by_claim_id))
 
+        report(Progress("resolving", "Deciding what is actually supported", total, total))
         return assemble_answer(resolved, provided)
 
-    def _retrieve(
-        self, documents: Sequence[LoadedDocument], situation: str
-    ) -> list[RetrievedSpan]:
+    def _retrieve(self, documents: Sequence[LoadedDocument], situation: str) -> list[RetrievedSpan]:
         store = InMemorySpanStore()
         with FTS5LexicalIndex() as index:
             for document in documents:
@@ -204,6 +230,11 @@ class PolicyDecoder:
         return [self._entailer.check(claim, item.span) for item in evidence]
 
 
+def _ignore_progress(progress: Progress) -> None:
+    """Default when a caller doesn't care — keeps `answer()` free of
+    `if on_progress is not None` noise at every stage."""
+
+
 def _with_numeric_verbatim_check(
     claim: AtomicClaim, verdicts: Sequence[EntailmentResult]
 ) -> AtomicClaim:
@@ -220,9 +251,7 @@ def _with_numeric_verbatim_check(
     if claim.claim_class != ClaimClass.DOCUMENT_FACT or not claim.is_numeric:
         return claim
     supporting_texts = [
-        verdict.span.text
-        for verdict in verdicts
-        if verdict.verdict == EntailmentVerdict.SUPPORTS
+        verdict.span.text for verdict in verdicts if verdict.verdict == EntailmentVerdict.SUPPORTS
     ]
     verbatim = any(
         numeric_value_appears_verbatim(str(claim.value), text) for text in supporting_texts

@@ -21,9 +21,7 @@ from decoder.schema import (
 
 
 def _span(text: str, doc_id: str = "policy", page: int = 3, span_id: str = "s1") -> Span:
-    return Span(
-        id=span_id, doc_id=doc_id, page=page, char_start=0, char_end=len(text), text=text
-    )
+    return Span(id=span_id, doc_id=doc_id, page=page, char_start=0, char_end=len(text), text=text)
 
 
 def _claim(
@@ -51,9 +49,7 @@ def _resolved(
     return ResolvedClaim(claim=claim or _claim(), verdicts=verdicts or [], state=state)
 
 
-def _verdict(
-    verdict: EntailmentVerdict, quote: str, span: Span | None = None
-) -> EntailmentResult:
+def _verdict(verdict: EntailmentVerdict, quote: str, span: Span | None = None) -> EntailmentResult:
     return EntailmentResult(
         claim_id="c1",
         span=span or _span(f"... {quote} ..."),

@@ -28,6 +28,12 @@ jobs:
         # actually imports it.
         run: uv sync --locked --group dev
 
+      - name: Install Chromium for browser tests
+        # tests/web/test_ui.py asserts docs/HANDOVER.md §8's UI contract in a
+        # real browser. Without this the whole file skips itself rather than
+        # failing, so CI would go green having checked none of it.
+        run: uv run playwright install --with-deps chromium
+
       - name: Lint (ruff check)
         run: uv run ruff check .
 
@@ -46,9 +52,10 @@ jobs:
         # skip cleanly here rather than failing, since neither a local model
         # server nor a paid API key is available on a hosted runner. This
         # means CI validates everything deterministic (schema, resolve,
-        # extraction, retrieval, intake, the PII guard, orchestrator wiring)
-        # but not live-model behavior — run those locally before relying on
-        # a change to them.
+        # extraction, retrieval, intake, the PII guard, orchestrator wiring,
+        # and the web/UI contract, which runs the real pipeline against a
+        # scripted model) but not live-model behavior — run those locally
+        # before relying on a change to them.
         run: uv run pytest -q
 
       - name: PII logging guard

@@ -1,0 +1,101 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Health Policy Decoder</title>
+<link rel="stylesheet" href="/static/app.css">
+</head>
+<body>
+<header class="masthead">
+  <h1>Health Policy Decoder</h1>
+  <p class="tagline">
+    What your policy actually says about your situation &mdash; traced to the clause,
+    and explicit about what these documents cannot answer.
+  </p>
+</header>
+
+<main>
+  <section class="panel" aria-labelledby="setup-heading">
+    <h2 id="setup-heading">Your situation</h2>
+
+    <label class="field">
+      <span class="field-label">Policy document</span>
+      <select id="doc-select" aria-describedby="doc-note"></select>
+    </label>
+    <p id="doc-note" class="doc-note"></p>
+
+    <label class="field">
+      <span class="field-label">What do you want to know?</span>
+      <textarea id="situation" rows="3"
+        placeholder="e.g. What co-payment applies to my claim?"></textarea>
+    </label>
+
+    <div class="examples" id="examples" role="group" aria-label="Example questions"></div>
+
+    <button id="analyze" type="button" class="primary">Analyse</button>
+  </section>
+
+  <section class="panel progress-panel" id="progress-panel" hidden aria-live="polite">
+    <div class="progress-row">
+      <span class="spinner" aria-hidden="true"></span>
+      <span id="progress-detail">Starting</span>
+    </div>
+    <div class="progress-track"><div class="progress-bar" id="progress-bar"></div></div>
+    <p class="progress-note" id="progress-note"></p>
+  </section>
+
+  <section class="panel error-panel" id="error-panel" hidden role="alert"></section>
+
+  <section id="results" hidden aria-labelledby="results-heading">
+    <div class="panel verdict" id="verdict">
+      <h2 id="results-heading">Overall</h2>
+      <p class="verdict-line">
+        <span class="state-chip" id="overall-chip"></span>
+        <span class="verdict-explainer" id="overall-explainer"></span>
+      </p>
+    </div>
+
+    <div class="panel" id="claims-panel">
+      <h2>What we checked, one statement at a time</h2>
+      <p class="panel-sub">
+        Each statement was checked on its own against the clauses found in your document.
+        Open one to see the words it was checked against.
+      </p>
+      <ol class="claims" id="claims"></ol>
+    </div>
+
+    <div class="panel" id="questions-panel" hidden>
+      <h2>What to ask your insurer</h2>
+      <p class="panel-sub">
+        These come from the gaps found above &mdash; not a standard checklist.
+      </p>
+      <ul class="questions" id="questions"></ul>
+    </div>
+
+    <div class="panel" id="inputs-panel" hidden>
+      <h2>What we still need from you</h2>
+      <ul class="missing-inputs" id="missing-inputs"></ul>
+    </div>
+  </section>
+</main>
+
+<dialog id="evidence-dialog" class="evidence-dialog">
+  <div class="dialog-sticky">
+    <div class="dialog-head">
+      <div>
+        <h3 id="dialog-title">Evidence</h3>
+        <p class="dialog-source" id="dialog-source"></p>
+      </div>
+      <button type="button" id="dialog-close" class="icon-button" aria-label="Close">&times;</button>
+    </div>
+    <blockquote class="dialog-quote" id="dialog-quote"></blockquote>
+  </div>
+  <div class="page-image-wrap">
+    <img id="page-image" alt="" />
+  </div>
+</dialog>
+
+<script src="/static/app.js"></script>
+</body>
+</html>

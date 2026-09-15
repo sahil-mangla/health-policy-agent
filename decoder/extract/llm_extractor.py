@@ -129,9 +129,7 @@ _NUMERIC_FIELDS: dict[str, _NumericFieldSpec] = {
             "of months or years — distinct from the general PED waiting "
             "period."
         ),
-        keyword_filter=re.compile(
-            r"specific|named\s+ailment|specified\s+disease", re.IGNORECASE
-        ),
+        keyword_filter=re.compile(r"specific|named\s+ailment|specified\s+disease", re.IGNORECASE),
         value_re=re.compile(r"(\d+)\s*(?:month|year)", re.IGNORECASE),
         unit="MONTHS_OR_YEARS_AS_STATED",
         basis="SPECIFIC_ILLNESS_WAITING_PERIOD",

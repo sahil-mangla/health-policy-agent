@@ -128,8 +128,6 @@ def test_wrong_document_type_is_refused_before_any_analysis() -> None:
             raise AssertionError("segmentation ran on a document that should have been refused")
 
     with pytest.raises(UnusableDocumentError) as excinfo:
-        load_document(
-            "motor-001", b"irrelevant", _MotorClassifier(), _ExplodingSegmenter()
-        )
+        load_document("motor-001", b"irrelevant", _MotorClassifier(), _ExplodingSegmenter())
     assert excinfo.value.doc_type == DocumentType.MOTOR_OR_LIFE_POLICY
     assert "motor or life" in str(excinfo.value)

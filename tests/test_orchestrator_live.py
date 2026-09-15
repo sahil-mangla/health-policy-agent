@@ -122,7 +122,5 @@ def test_gaps_produce_specific_questions_supported_claims_do_not(
 ) -> None:
     answer = _decoder().answer([arogya_sanjeevani], "What co-payment applies to my claim?")
     questions = generate_follow_up_questions(list(answer.claims))
-    unsupported = [
-        r for r in answer.claims if r.state != SupportState.WELL_SUPPORTED
-    ]
+    unsupported = [r for r in answer.claims if r.state != SupportState.WELL_SUPPORTED]
     assert len(questions) == len(unsupported)

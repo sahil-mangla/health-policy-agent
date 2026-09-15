@@ -44,9 +44,7 @@ def generate_follow_up_questions(
             # input, which is more specific than the claim text.
             continue
         claim = resolved.claim
-        questions.append(
-            template.format(claim=f"{claim.subject} {claim.predicate} {claim.value}")
-        )
+        questions.append(template.format(claim=f"{claim.subject} {claim.predicate} {claim.value}"))
 
     return _deduped(questions)
 

@@ -325,16 +325,12 @@ def test_conflicting_candidates_are_surfaced_not_silently_resolved() -> None:
 def test_extract_list_returns_one_item_per_matched_span() -> None:
     # SPIKE-6's representation (decoder/schema.py's ExtractedListField):
     # one item per span, no sub-splitting of a span's prose.
-    fake = _FakeLLMClient(
-        "FOUND: YES\nQUOTE: Consultation fees, OT charges, and nursing charges"
-    )
+    fake = _FakeLLMClient("FOUND: YES\nQUOTE: Consultation fees, OT charges, and nursing charges")
     span = _span(
         "Associated Medical Expenses means Consultation fees, OT charges, "
         "and nursing charges incurred during Hospitalization."
     )
-    field = LLMFieldExtractor(fake).extract_list(
-        "proportionate_deduction_included_heads", [span]
-    )
+    field = LLMFieldExtractor(fake).extract_list("proportionate_deduction_included_heads", [span])
     assert len(field.items) == 1
     assert field.items[0].value == "Consultation fees, OT charges, and nursing charges"
     assert field.items[0].verbatim_match is True
@@ -344,9 +340,7 @@ def test_extract_list_returns_one_item_per_matched_span() -> None:
 def test_extract_list_drops_fabricated_quote() -> None:
     fake = _FakeLLMClient("FOUND: YES\nQUOTE: a completely made-up list of items")
     span = _span("Associated Medical Expenses means Consultation fees, OT charges.")
-    field = LLMFieldExtractor(fake).extract_list(
-        "proportionate_deduction_included_heads", [span]
-    )
+    field = LLMFieldExtractor(fake).extract_list("proportionate_deduction_included_heads", [span])
     assert field.items == []
 
 
@@ -360,18 +354,14 @@ def test_extract_list_rejects_a_passing_mention_with_too_few_commas() -> None:
         "Room Rent charges including all Associated Medical Expenses shall "
         "be reduced proportionately."
     )
-    field = LLMFieldExtractor(fake).extract_list(
-        "proportionate_deduction_included_heads", [span]
-    )
+    field = LLMFieldExtractor(fake).extract_list("proportionate_deduction_included_heads", [span])
     assert field.items == []
 
 
 def test_extract_list_not_found_returns_empty_items_never_none() -> None:
     fake = _FakeLLMClient("FOUND: NO\nQUOTE: NONE")
     span = _span("This document never mentions Associated Medical Expenses.")
-    field = LLMFieldExtractor(fake).extract_list(
-        "proportionate_deduction_included_heads", [span]
-    )
+    field = LLMFieldExtractor(fake).extract_list("proportionate_deduction_included_heads", [span])
     assert field.items == []
 
 

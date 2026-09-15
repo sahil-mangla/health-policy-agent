@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """PII guard: fail if any logging/print call directly references a `.text`
-attribute anywhere under decoder/.
+attribute anywhere under decoder/ or web/.
 
 docs/HANDOVER.md §9.5: "no document content in logs, ever ... Write this
 into the code as a lint-enforced boundary, not a policy doc." The primary
@@ -43,10 +43,17 @@ def find_violations(root: Path) -> list[str]:
     return violations
 
 
+# web/ is scanned too: it is the tier that actually hands document text to
+# a browser, so it is where an "just log the span while debugging" mistake
+# is most likely to be made and least likely to be noticed.
+SCANNED_DIRS = ("decoder", "web")
+
+
 def main() -> int:
     repo_root = Path(__file__).resolve().parent.parent
-    decoder_root = repo_root / "decoder"
-    violations = find_violations(decoder_root)
+    violations: list[str] = []
+    for directory in SCANNED_DIRS:
+        violations.extend(find_violations(repo_root / directory))
     if violations:
         print("PII guard failed — possible document text logged directly:", file=sys.stderr)
         for v in violations:

@@ -751,6 +751,47 @@ results written up.
 secondary affordance for "why is this flagged" / "show me the clause" / "simpler
 language". Build the analysis view first.
 
+*Status as of 2026-09-15: the analysis view exists and is wired to the real
+pipeline — `web/` (FastAPI + vanilla HTML/CSS/JS, no build step), run with
+`uv run uvicorn web.app:app --reload`. It is a structured view, not a chat
+window: pick a bundled real policy, describe a situation, and every claim
+comes back as its own row carrying §8's state label, the state's specific
+accompanying explanation, the verbatim clause behind it, and the page it
+came from with that passage boxed — `web/page_image.py` renders it via
+pdfplumber, and the dialog scrolls to the highlight rather than opening at
+the top of the page. §8's forbidden generic AI disclaimer is absent, and a
+browser test guards against one being added later.*
+
+*The web tier deliberately holds no opinion of its own about evidence:
+every state and label it shows comes from `decoder.resolve` and
+`decoder.respond.labels`, so there is no second, divergent vocabulary for
+how sure the system is. Analysis runs as a polled background job because a
+real run is tens of seconds; `PolicyDecoder.answer()` now takes an optional
+`on_progress` callback so the progress shown is reported by the pipeline
+rather than invented by the browser.*
+
+*Testing: `tests/web/test_api.py` (12) and `tests/web/test_ui.py` (8,
+Playwright/Chromium) both drive the REAL pipeline — real retrieval over a
+real corpus document, real decomposition parsing, real hallucination trap,
+real resolution — with a scripted model (`web/fake_llm.py`) in place of the
+LLM, so they assert the §8 UI contract in ~20s without being flaky about a
+7B model's wording. CI installs Chromium so the UI file cannot silently
+skip itself. The live-model path was verified by hand through the browser
+on 2026-09-15, not only through the scripted one.*
+
+*One honest observation from that live run, not yet fixed: asked "What is
+the room rent limit per day?", the system returned WELL_SUPPORTED for the
+claim "the room rent limit is Rs.5000/-", citing two real spans that both
+actually read "up to 2% of the sum insured subject to maximum of
+Rs.5000/-, per day". The citation is correct and the reader can see the
+full clause, but the claim text drops the binding half of a compound
+limit: at a ₹1L sum insured the real cap is ₹2,000/day, not ₹5,000. The
+evidence shown is what saves it, which is the design working — but a
+compound limit flattened into its cap is exactly the kind of error the
+eval set (§11/§12) needs to be able to catch, and it argues for the hero
+scenario's arithmetic being computed from extracted fields rather than
+summarised in prose by the drafter.*
+
 ---
 
 ## 15. Open decisions `SPIKE`
