@@ -3,7 +3,7 @@ from __future__ import annotations
 import pytest
 from pydantic import ValidationError
 
-from decoder.schema import ExtractedField, Span
+from decoder.schema import ExtractedField, ExtractedListField, Span
 
 
 def _make_span(text: str = "the room rent limit is INR 5,000 per day") -> Span:
@@ -54,3 +54,52 @@ def test_extracted_field_none_value_with_no_spans_is_valid() -> None:
     )
     assert field.value is None
     assert field.spans == []
+
+
+def test_extracted_list_field_empty_items_is_a_valid_not_found_state() -> None:
+    # SPIKE-6 (§15): absence is reportable, never a fabricated default list
+    # (§4 point 2, §6).
+    field = ExtractedListField(
+        field_name="proportionate_deduction_carveouts",
+        items=[],
+        extraction_method="LLM_STRUCTURED",
+    )
+    assert field.items == []
+
+
+def test_extracted_list_field_items_carry_independent_provenance() -> None:
+    span_a = _make_span(text="Consultation fees are included.")
+    span_b = _make_span(text="Operation theatre charges are included.")
+    field = ExtractedListField(
+        field_name="proportionate_deduction_included_heads",
+        items=[
+            ExtractedField(
+                field_name="proportionate_deduction_included_heads",
+                value="Consultation fees",
+                spans=[span_a],
+                extraction_method="LLM_STRUCTURED",
+                verbatim_match=True,
+            ),
+            ExtractedField(
+                field_name="proportionate_deduction_included_heads",
+                value="Operation theatre charges",
+                spans=[span_b],
+                extraction_method="LLM_STRUCTURED",
+                verbatim_match=True,
+            ),
+        ],
+        extraction_method="LLM_STRUCTURED",
+    )
+    assert len(field.items) == 2
+    assert field.items[0].spans[0] is span_a
+    assert field.items[1].spans[0] is span_b
+
+
+def test_extracted_list_field_is_frozen() -> None:
+    field = ExtractedListField(
+        field_name="proportionate_deduction_carveouts",
+        items=[],
+        extraction_method="LLM_STRUCTURED",
+    )
+    with pytest.raises(ValidationError):
+        field.items = []  # type: ignore[misc]

@@ -101,6 +101,36 @@ class ExtractedField(BaseModel):
         return self
 
 
+class ExtractedListField(BaseModel):
+    """A list-valued field — SPIKE-6 (docs/HANDOVER.md §15), resolved
+    2026-09-15. The first real instance is the proportionate-deduction
+    expense-head list (§4 point 2): which heads a policy subjects to
+    deduction, and which it carves out.
+
+    `items` holds one ExtractedField per matched SPAN — never a further
+    algorithmic split of one span's prose into sub-items. Real policy
+    wording enumerates these in free-flowing sentences with nested internal
+    commas (e.g. "... Anesthesia, blood, oxygen ...") that cannot be
+    reliably tokenized without risking a wrong split masquerading as a
+    correct one — exactly the "wrong number with a correct-looking
+    citation" failure §1 warns against. If a document segments its list
+    into one span per bullet, that naturally yields one item per bullet; if
+    it's one prose paragraph, the whole paragraph is one item — either way
+    every item keeps real per-span provenance, and the raw span text is
+    always what's shown, never a guessed decomposition of it.
+
+    An empty `items` list is a valid, reportable state: the policy does not
+    enumerate this field at all — §4 point 2's own instruction ("If the
+    policy does not enumerate it, that is INSUFFICIENT_EVIDENCE and becomes
+    a question"), never a fabricated default list (§6, §16)."""
+
+    model_config = ConfigDict(frozen=True)
+
+    field_name: str
+    items: list[ExtractedField] = []
+    extraction_method: str
+
+
 class DerivedOperation(BaseModel):
     """The structured arithmetic backing a DERIVED AtomicClaim — §7.1:
     "Claim 3 is arithmetic and is checked by code, not by a model."

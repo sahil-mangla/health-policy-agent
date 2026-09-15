@@ -168,8 +168,83 @@ def test_unknown_field_name_raises_not_implemented(
 ) -> None:
     with pytest.raises(NotImplementedError):
         LLMFieldExtractor(OllamaLLMClient(), model=_MODEL).extract(
-            "proportionate_deduction_carveouts", arogya_sanjeevani_wording_spans
+            "some_unknown_scalar_field", arogya_sanjeevani_wording_spans
         )
+
+
+def test_unknown_list_field_name_raises_not_implemented(
+    arogya_sanjeevani_wording_spans: list[Span],
+) -> None:
+    with pytest.raises(NotImplementedError):
+        LLMFieldExtractor(OllamaLLMClient(), model=_MODEL).extract_list(
+            "some_unknown_list_field", arogya_sanjeevani_wording_spans
+        )
+
+
+def test_proportionate_deduction_included_heads_arogya_sanjeevani(
+    arogya_sanjeevani_wording_spans: list[Span],
+) -> None:
+    # Real clause: "Associated Medical Expenses means Consultation fees,
+    # charges on Operation theatre, surgical appliances & nursing, and
+    # expenses on Anesthesia, blood, oxygen incurred during Hospitalization
+    # of the Insured Person" — the actual enumeration the hero scenario
+    # (§4 point 2) needs.
+    field = LLMFieldExtractor(OllamaLLMClient(), model=_MODEL).extract_list(
+        "proportionate_deduction_included_heads", arogya_sanjeevani_wording_spans
+    )
+    assert len(field.items) == 1
+    item = field.items[0]
+    assert isinstance(item.value, str)
+    assert "Consultation fees" in item.value
+    assert "Anesthesia" in item.value
+    assert item.verbatim_match is True
+    assert item.value in item.spans[0].text
+
+
+def test_proportionate_deduction_included_heads_rejects_passing_mention(
+    arogya_sanjeevani_wording_spans: list[Span],
+) -> None:
+    # Regression test for a real false positive caught by hand (2026-09-15):
+    # the model first matched "...Room Rent charges including all
+    # Associated Medical Expenses incurred at Hospital..." — a passage that
+    # just mentions the term while applying the deduction rule, not one
+    # that enumerates what the term covers. The only real enumeration in
+    # this document is the one item test_proportionate_deduction_included_
+    # heads_arogya_sanjeevani already asserts on — so a correct run here
+    # must return exactly that one item, not two.
+    field = LLMFieldExtractor(OllamaLLMClient(), model=_MODEL).extract_list(
+        "proportionate_deduction_included_heads", arogya_sanjeevani_wording_spans
+    )
+    assert len(field.items) == 1
+
+
+def test_proportionate_deduction_carveouts_not_stated_in_starter_corpus(
+    arogya_sanjeevani_wording_spans: list[Span],
+) -> None:
+    # None of the starter corpus documents state an explicit carve-out
+    # (excluded-from-deduction) list — confirmed by hand across the whole
+    # corpus, 2026-09-15. This is the expected, common real-world case per
+    # §4 point 2 ("If the policy does not enumerate it, that is
+    # INSUFFICIENT_EVIDENCE and becomes a question"), not a defect — this
+    # test proves the empty-items "not found" path actually fires against
+    # real spans rather than just being asserted in the abstract.
+    field = LLMFieldExtractor(OllamaLLMClient(), model=_MODEL).extract_list(
+        "proportionate_deduction_carveouts", arogya_sanjeevani_wording_spans
+    )
+    assert field.items == []
+
+
+def test_proportionate_deduction_included_heads_not_found_when_absent(
+    easy_health_cis_spans: list[Span],
+) -> None:
+    # Easy Health has no room-rent restriction at all (corpus/README.md),
+    # so it has no reason to define "Associated Medical Expenses" either —
+    # confirms the field correctly returns nothing rather than fabricating
+    # a list on a document that doesn't discuss the concept.
+    field = LLMFieldExtractor(OllamaLLMClient(), model=_MODEL).extract_list(
+        "proportionate_deduction_included_heads", easy_health_cis_spans
+    )
+    assert field.items == []
 
 
 class _FakeLLMClient(LLMClient):
@@ -245,3 +320,63 @@ def test_conflicting_candidates_are_surfaced_not_silently_resolved() -> None:
     assert len(field.conflicting_candidates) == 2
     values = {c.value for c in field.conflicting_candidates}
     assert values == {5.0, 10.0}
+
+
+def test_extract_list_returns_one_item_per_matched_span() -> None:
+    # SPIKE-6's representation (decoder/schema.py's ExtractedListField):
+    # one item per span, no sub-splitting of a span's prose.
+    fake = _FakeLLMClient(
+        "FOUND: YES\nQUOTE: Consultation fees, OT charges, and nursing charges"
+    )
+    span = _span(
+        "Associated Medical Expenses means Consultation fees, OT charges, "
+        "and nursing charges incurred during Hospitalization."
+    )
+    field = LLMFieldExtractor(fake).extract_list(
+        "proportionate_deduction_included_heads", [span]
+    )
+    assert len(field.items) == 1
+    assert field.items[0].value == "Consultation fees, OT charges, and nursing charges"
+    assert field.items[0].verbatim_match is True
+    assert field.field_name == "proportionate_deduction_included_heads"
+
+
+def test_extract_list_drops_fabricated_quote() -> None:
+    fake = _FakeLLMClient("FOUND: YES\nQUOTE: a completely made-up list of items")
+    span = _span("Associated Medical Expenses means Consultation fees, OT charges.")
+    field = LLMFieldExtractor(fake).extract_list(
+        "proportionate_deduction_included_heads", [span]
+    )
+    assert field.items == []
+
+
+def test_extract_list_rejects_a_passing_mention_with_too_few_commas() -> None:
+    # A verified-verbatim quote that isn't actually an enumeration (fewer
+    # than two commas) must be dropped — see _MIN_ENUMERATION_COMMAS in
+    # decoder/extract/llm_extractor.py, a regression guard for the real
+    # false positive this caught by hand against the corpus (2026-09-15).
+    fake = _FakeLLMClient("FOUND: YES\nQUOTE: including all Associated Medical Expenses")
+    span = _span(
+        "Room Rent charges including all Associated Medical Expenses shall "
+        "be reduced proportionately."
+    )
+    field = LLMFieldExtractor(fake).extract_list(
+        "proportionate_deduction_included_heads", [span]
+    )
+    assert field.items == []
+
+
+def test_extract_list_not_found_returns_empty_items_never_none() -> None:
+    fake = _FakeLLMClient("FOUND: NO\nQUOTE: NONE")
+    span = _span("This document never mentions Associated Medical Expenses.")
+    field = LLMFieldExtractor(fake).extract_list(
+        "proportionate_deduction_included_heads", [span]
+    )
+    assert field.items == []
+
+
+def test_extract_list_unknown_field_raises_not_implemented() -> None:
+    fake = _FakeLLMClient("FOUND: NO\nQUOTE: NONE")
+    span = _span("irrelevant")
+    with pytest.raises(NotImplementedError):
+        LLMFieldExtractor(fake).extract_list("not_a_real_list_field", [span])

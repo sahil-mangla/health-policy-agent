@@ -9,10 +9,8 @@ stated in a room-rent-mentioning clause.
 
 Deliberately NOT implemented here: room-CATEGORY eligibility (e.g. "single
 private AC room" — too much phrasing variety to regex safely), waiting
-periods, and co-pay — now covered by decoder.extract.llm_extractor
-instead. The carve-out/associated-medical-expenses list is not implemented
-anywhere yet (list-valued, needs a SPIKE-6 schema decision — see
-decoder.extract.llm_extractor's module docstring). Regex-guessing any of
+periods, co-pay, and the proportionate-deduction expense-head lists — all
+covered by decoder.extract.llm_extractor instead. Regex-guessing any of
 these risks exactly the "wrong number with a correct-looking citation"
 failure §1 of the handover calls out as worse than no answer — safer to
 return INSUFFICIENT_EVIDENCE via resolve() than to fabricate a pattern

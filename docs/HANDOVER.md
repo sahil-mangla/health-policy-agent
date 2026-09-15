@@ -592,11 +592,23 @@ is in `tests/extract/test_llm_extractor.py`. Still needs a real corpus
 document with a room-category clause before it can be called verified
 rather than just implemented.
 
-The proportionate-deduction carve-out list is still NOT implemented
-anywhere — it's list-valued and `ExtractedField.value` is scalar
-(`str | int | float | bool | None`); extending that is a schema decision
-(SPIKE-6, still NOT STARTED) rather than one made unilaterally inside an
-extractor module.
+The proportionate-deduction expense-head lists (§4 point 2 — both the heads
+a policy subjects to deduction, and any it carves out) are now implemented
+too, per SPIKE-6's resolution below: `decoder/schema.py`'s new
+`ExtractedListField`, wired into `LLMFieldExtractor.extract_list()`.
+Verified by hand against real Arogya Sanjeevani spans: the actual
+"Associated Medical Expenses means Consultation fees, charges on Operation
+theatre, surgical appliances & nursing, and expenses on Anesthesia, blood,
+oxygen..." enumeration is correctly extracted as one item; a real false
+positive was caught and fixed before shipping (a passage that only
+*mentions* "Associated Medical Expenses" in passing while applying the
+deduction rule was first matched as if it enumerated the term — fixed by
+requiring the verified quote to contain at least two commas before it
+counts as an enumeration, plus a prompt clarification). No document in the
+starter corpus states an explicit carve-out (excluded-from-deduction) list
+at all — confirmed across the whole corpus, and expected: §4 point 2 itself
+treats this as the normal case, not a defect, and the extractor correctly
+returns an empty list rather than fabricating one.
 
 Extraction metrics/CI and the annotated set are not started (still blocked
 on SPIKE-2).*
@@ -686,7 +698,7 @@ language". Build the analysis view first.
 | SPIKE-3 | Retrieval stack | M2 | RESOLVED (2026-09-14) — see `/docs/spikes/retrieval-stack.md` |
 | SPIKE-4 | Second output language and when | Post-MVP | PARTIALLY RESOLVED (2026-09-14) — see `/docs/spikes/translation-language.md`. Language (Hindi) and mechanism (translate only the final verified answer text, via Gemini — tested against Ollama and found clearly better for this role) are decided; "when" (which milestone ships it in the UI) is still open since no frontend exists yet. |
 | SPIKE-5 | Model choice per role — drafting and verification need not be the same model, and the verifier arguably should be cheaper and dumber | M3 | PARTIALLY RESOLVED (2026-09-14) — `decoder/llm/interface.py`'s `LLMClient` now has two real, working implementations (`ollama_client.py`, local, no key; `gemini_client.py`, cloud, needs `GEMINI_API_KEY`) plus two documented stubs (`anthropic_client.py`, `openai_client.py`, unwired pending keys) — any package can use any provider per role without changing its own code. Which specific model(s) to use per role (drafter vs. verifier, and which provider) is still open. |
-| SPIKE-6 | Final policy schema beyond the hero fields | M1 extension | NOT STARTED |
+| SPIKE-6 | Final policy schema beyond the hero fields | M1 extension | PARTIALLY RESOLVED (2026-09-15) — the immediate blocker (how a list-valued field is represented) is resolved: `decoder/schema.py`'s `ExtractedListField`, one item per matched span, no algorithmic sub-splitting of a span's prose. Implemented for the proportionate-deduction expense-head lists (§4 point 2), verified against the real corpus. The broader "final schema" question — every other field beyond the hero set (sub-limits, exclusions, etc.) — remains open and will keep resolving incrementally as those fields get built, same as regex/LLM extraction already does per-field. |
 | SPIKE-7 | Annotation protocol and inter-annotator agreement for the eval set | M0 | NOT STARTED |
 
 Resolve, date, and record in this file.

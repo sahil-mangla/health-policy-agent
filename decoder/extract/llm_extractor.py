@@ -17,11 +17,12 @@ quote fails the regex and the span is simply dropped, not trusted. For
 text fields (room category) there is no separate value: the value IS the
 verified quote.
 
-NOT implemented here: the proportionate-deduction carve-out list
-(docs/HANDOVER.md §4 point 2). It is list-valued and
-decoder.schema.ExtractedField.value is scalar (str | int | float | bool |
-None) — extending that is a schema decision (SPIKE-6, still NOT STARTED
-per §15), not one to make unilaterally inside an extractor module.
+Also covers the proportionate-deduction expense-head lists
+(docs/HANDOVER.md §4 point 2) via extract_list() — see
+decoder.schema.ExtractedListField for the SPIKE-6 representation decision
+(§15, resolved 2026-09-15) this implements: the same per-span isolation and
+hallucination trap as the scalar fields above, with no further attempt to
+split one span's prose into sub-items.
 """
 
 from __future__ import annotations
@@ -29,9 +30,9 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass
 
-from decoder.extract.interfaces import FieldExtractor
+from decoder.extract.interfaces import FieldExtractor, ListFieldExtractor
 from decoder.llm.interface import LLMClient
-from decoder.schema import ExtractedField, Span
+from decoder.schema import ExtractedField, ExtractedListField, Span
 from decoder.verify.span_containment import is_verbatim_in_span
 
 # Wording follows the same fail-safe-to-not-found posture as
@@ -54,6 +55,11 @@ _SYSTEM_PROMPT_TEMPLATE = (
 
 _FOUND_RE = re.compile(r"FOUND:\s*(\w+)", re.IGNORECASE)
 _QUOTE_RE = re.compile(r"QUOTE:\s*(.+)", re.IGNORECASE | re.DOTALL)
+
+# A list-field quote must contain at least this many commas to be accepted
+# as a genuine enumeration rather than a passage that just mentions the
+# term in passing — see extract_list()'s use of this.
+_MIN_ENUMERATION_COMMAS = 2
 
 
 def _strip_stray_quote_marks(text: str) -> str:
@@ -159,10 +165,58 @@ _TEXT_FIELDS: dict[str, _TextFieldSpec] = {
     ),
 }
 
+
+@dataclass(frozen=True)
+class _ListFieldSpec:
+    description: str
+    keyword_filter: re.Pattern[str]
+    basis: str
+
+
+_LIST_FIELDS: dict[str, _ListFieldSpec] = {
+    "proportionate_deduction_included_heads": _ListFieldSpec(
+        description=(
+            "The expense heads (e.g. consultation fees, operation theatre "
+            "charges, nursing, anesthesia, ICU charges, medicines, "
+            "diagnostics) that this policy states are included within "
+            "'Associated Medical Expenses' — and are therefore SUBJECT TO "
+            "proportionate deduction when the room rent exceeds the "
+            "eligible limit. Match a passage that actually ENUMERATES or "
+            "DEFINES this set — not a passage that merely mentions "
+            "'Associated Medical Expenses' in passing (e.g. saying room "
+            "rent 'includes' them, or that a deduction 'applies to' them) "
+            "without listing what the term covers."
+        ),
+        keyword_filter=re.compile(r"associated\s+medical\s+expenses", re.IGNORECASE),
+        basis="PROPORTIONATE_DEDUCTION_INCLUDED",
+    ),
+    "proportionate_deduction_carveouts": _ListFieldSpec(
+        description=(
+            "The expense heads this policy explicitly states are EXCLUDED "
+            "or CARVED OUT from proportionate deduction — i.e. paid in "
+            "full regardless of any room-rent limit breach (e.g. a "
+            "statement that pharmacy, implants, diagnostics, or ICU "
+            "charges are NOT subject to the proportionate reduction). Do "
+            "NOT match a passage listing expenses that ARE subject to "
+            "proportionate deduction — that is a different field, and most "
+            "Indian policies do not state a carve-out list at all, which "
+            "is a valid and expected 'not found' outcome, not a failure."
+        ),
+        keyword_filter=re.compile(
+            r"not\s+(?:be\s+)?subject\s+to\s+proportion"
+            r"|excluded\s+from\s+(?:the\s+)?proportion"
+            r"|shall\s+not\s+apply\s+to\s+.*proportion",
+            re.IGNORECASE,
+        ),
+        basis="PROPORTIONATE_DEDUCTION_CARVEOUT",
+    ),
+}
+
 KNOWN_FIELDS = frozenset({*_NUMERIC_FIELDS, *_TEXT_FIELDS})
+KNOWN_LIST_FIELDS = frozenset(_LIST_FIELDS)
 
 
-class LLMFieldExtractor(FieldExtractor):
+class LLMFieldExtractor(FieldExtractor, ListFieldExtractor):
     def __init__(self, llm: LLMClient, model: str = "qwen2.5-coder:7b") -> None:
         self._llm = llm
         self._model = model
@@ -174,8 +228,47 @@ class LLMFieldExtractor(FieldExtractor):
             return self._extract_text(field_name, _TEXT_FIELDS[field_name], spans)
         raise NotImplementedError(
             f"LLMFieldExtractor does not implement {field_name!r}. Known "
-            f"fields: {sorted(KNOWN_FIELDS)}. See this module's docstring "
-            "for why the carve-out list isn't here yet."
+            f"scalar fields: {sorted(KNOWN_FIELDS)}. List-valued fields go "
+            f"through extract_list() instead: {sorted(KNOWN_LIST_FIELDS)}."
+        )
+
+    def extract_list(self, field_name: str, spans: list[Span]) -> ExtractedListField:
+        if field_name not in _LIST_FIELDS:
+            raise NotImplementedError(
+                f"LLMFieldExtractor does not implement {field_name!r} as a "
+                f"list field. Known list fields: {sorted(KNOWN_LIST_FIELDS)}."
+            )
+        spec = _LIST_FIELDS[field_name]
+        items: list[ExtractedField] = []
+        for span in self._candidate_spans(spans, spec.keyword_filter):
+            quote = self._query_span(spec.description, span)
+            if quote is None:
+                continue
+            if quote.count(",") < _MIN_ENUMERATION_COMMAS:
+                # Model said FOUND: YES with a verified-verbatim quote that
+                # doesn't actually look like an enumeration (e.g. a passage
+                # that just mentions the term in passing, such as "...
+                # Room Rent ... including all Associated Medical Expenses
+                # incurred at Hospital ..." — a real false positive caught
+                # by hand against the starter corpus, 2026-09-15). A
+                # deterministic structural gate, same fail-closed posture
+                # as the numeric fields' value regex.
+                continue
+            items.append(
+                ExtractedField(
+                    field_name=field_name,
+                    value=quote,
+                    unit=None,
+                    basis=spec.basis,
+                    spans=[span],
+                    extraction_method="LLM_STRUCTURED",
+                    # True by construction: quote was already verified
+                    # verbatim-in-span by _query_span's hallucination trap.
+                    verbatim_match=True,
+                )
+            )
+        return ExtractedListField(
+            field_name=field_name, items=items, extraction_method="LLM_STRUCTURED"
         )
 
     @staticmethod
