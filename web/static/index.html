@@ -33,6 +33,24 @@
 
     <div class="examples" id="examples" role="group" aria-label="Example questions"></div>
 
+    <details class="hero-inputs">
+      <summary>Checking a room-rent limit? Add your numbers (optional)</summary>
+      <div class="hero-inputs-grid">
+        <label class="field">
+          <span class="field-label">Room tariff (₹/day)</span>
+          <input id="room-tariff" type="number" min="1" step="1"
+            placeholder="e.g. 8000" aria-describedby="room-tariff-note">
+          <span class="field-note" id="room-tariff-note"></span>
+        </label>
+        <label class="field">
+          <span class="field-label">Sum insured (₹)</span>
+          <input id="sum-insured" type="number" min="1" step="1"
+            placeholder="e.g. 500000" aria-describedby="sum-insured-note">
+          <span class="field-note" id="sum-insured-note"></span>
+        </label>
+      </div>
+    </details>
+
     <button id="analyze" type="button" class="primary">Analyse</button>
   </section>
 
@@ -54,6 +72,15 @@
         <span class="state-chip" id="overall-chip"></span>
         <span class="verdict-explainer" id="overall-explainer"></span>
       </p>
+    </div>
+
+    <div class="panel arithmetic-panel" id="arithmetic-panel" hidden>
+      <h2>Room-rent arithmetic</h2>
+      <p class="panel-sub">
+        Computed directly from the extracted limit and the numbers you entered &mdash;
+        not summarised by a model.
+      </p>
+      <dl class="arithmetic-grid" id="arithmetic-grid"></dl>
     </div>
 
     <div class="panel" id="claims-panel">

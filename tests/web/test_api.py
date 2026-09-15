@@ -28,8 +28,19 @@ def client() -> TestClient:
     return TestClient(create_app())
 
 
-def _run(client: TestClient, situation: str, doc_id: str = "arogya_sanjeevani") -> dict[str, Any]:
-    started = client.post("/api/analyze", json={"doc_id": doc_id, "situation": situation})
+def _run(
+    client: TestClient,
+    situation: str,
+    doc_id: str = "arogya_sanjeevani",
+    room_tariff_per_day: float | None = None,
+    sum_insured: float | None = None,
+) -> dict[str, Any]:
+    body: dict[str, Any] = {"doc_id": doc_id, "situation": situation}
+    if room_tariff_per_day is not None:
+        body["room_tariff_per_day"] = room_tariff_per_day
+    if sum_insured is not None:
+        body["sum_insured"] = sum_insured
+    started = client.post("/api/analyze", json=body)
     assert started.status_code == 200
     job_id = started.json()["job_id"]
     for _ in range(600):
@@ -138,6 +149,56 @@ def test_empty_situation_is_rejected(client: TestClient) -> None:
 
 def test_unknown_job_is_404(client: TestClient) -> None:
     assert client.get("/api/jobs/deadbeef").status_code == 404
+
+
+def test_room_rent_inputs_expose_the_decoder_side_descriptions(client: TestClient) -> None:
+    inputs = client.get("/api/room-rent-inputs").json()
+    assert inputs["room_tariff_per_day"]["name"] == "room_tariff_per_day"
+    assert inputs["sum_insured"]["description"]
+
+
+def test_room_rent_cap_claim_always_present_even_without_inputs(client: TestClient) -> None:
+    # §4's hero scenario runs unconditionally alongside the situational
+    # question, whether or not the user supplied a tariff yet.
+    job = _run(client, "What co-payment applies to my claim?")
+    claims = job["answer"]["claims"]
+    assert any("room-rent" in c["text"].lower() for c in claims)
+    assert job["answer"]["room_rent_calculation"] is None  # nothing computable without SI
+
+
+def test_room_rent_calculation_appears_once_both_inputs_given(client: TestClient) -> None:
+    # Real Arogya Sanjeevani clause: 2% of SI, capped at ₹5,000/day. At
+    # ₹1L sum insured the binding number is ₹2,000, not the flat ₹5,000 —
+    # the exact case that motivated computing this in code (HANDOVER's M5
+    # status note).
+    job = _run(
+        client,
+        "What co-payment applies to my claim?",
+        room_tariff_per_day=8000,
+        sum_insured=100_000,
+    )
+    calc = job["answer"]["room_rent_calculation"]
+    assert calc is not None
+    assert calc["eligible_limit_per_day"] == 2000.0
+    assert calc["room_tariff_per_day"] == 8000.0
+    assert calc["exceeds_limit"] is True
+    assert calc["deduction_ratio_percent"] == pytest.approx(25.0)
+
+    comparison = next(
+        c for c in job["answer"]["claims"] if "exceeds" in c["text"] or "within" in c["text"]
+    )
+    assert comparison["state"] == "WELL_SUPPORTED"
+    assert "True" not in comparison["text"]  # boolean value must not leak into the rendered text
+
+
+def test_room_rent_calculation_absent_without_sum_insured(client: TestClient) -> None:
+    # Tariff alone isn't enough for a %-of-SI cap — must not guess a
+    # sum insured to produce a number anyway.
+    job = _run(client, "What co-payment applies to my claim?", room_tariff_per_day=8000)
+    assert job["answer"]["room_rent_calculation"] is None
+    cap_claim = next(c for c in job["answer"]["claims"] if "capped at" in c["text"])
+    assert cap_claim["state"] == "NEEDS_INFORMATION"
+    assert any(i["name"] == "sum_insured" for i in job["answer"]["missing_inputs"])
 
 
 def test_catalogue_entries_all_point_at_real_analysable_documents() -> None:

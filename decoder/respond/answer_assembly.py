@@ -27,6 +27,8 @@ from decoder.respond.labels import (
 )
 from decoder.schema import (
     Answer,
+    AtomicClaim,
+    ClaimClass,
     EntailmentResult,
     EntailmentVerdict,
     RequiredInput,
@@ -87,10 +89,8 @@ def render_answer_text(resolved_claims: Sequence[ResolvedClaim]) -> str:
 
     blocks: list[str] = []
     for resolved in resolved_claims:
-        claim = resolved.claim
         lines = [
-            f"[{SUPPORT_STATE_LABELS[resolved.state]}] "
-            f"{claim.subject} {claim.predicate} {claim.value}"
+            f"[{SUPPORT_STATE_LABELS[resolved.state]}] {render_claim_statement(resolved.claim)}"
         ]
         lines.extend(
             f"    {_evidence_line(verdict)}"
@@ -99,6 +99,21 @@ def render_answer_text(resolved_claims: Sequence[ResolvedClaim]) -> str:
         )
         blocks.append("\n".join(lines))
     return "\n\n".join(blocks)
+
+
+def render_claim_statement(claim: AtomicClaim) -> str:
+    """The one place a claim's subject/predicate/value become a sentence —
+    used here and by web/app.py, so the two never drift apart.
+
+    A DERIVED claim (decoder.extract.room_rent_limit is the first real
+    source of these) is constructed with predicate already phrased as a
+    complete statement and value fixed to the bool that makes it true
+    (see that module's docstring) — appending the raw True/False would be
+    redundant and unreadable ("...applies to the excess True"), so it's
+    omitted for exactly that claim shape."""
+    if claim.claim_class == ClaimClass.DERIVED and isinstance(claim.value, bool):
+        return f"{claim.subject} {claim.predicate}"
+    return f"{claim.subject} {claim.predicate} {claim.value}"
 
 
 def _evidence_line(verdict: EntailmentResult) -> str:

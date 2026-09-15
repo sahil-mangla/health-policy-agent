@@ -131,3 +131,43 @@ def test_wrong_document_type_is_refused_before_any_analysis() -> None:
         load_document("motor-001", b"irrelevant", _MotorClassifier(), _ExplodingSegmenter())
     assert excinfo.value.doc_type == DocumentType.MOTOR_OR_LIFE_POLICY
     assert "motor or life" in str(excinfo.value)
+
+
+def test_expired_policy_is_refused_before_any_analysis(monkeypatch: pytest.MonkeyPatch) -> None:
+    # §9.2: "Analysis of a lapsed policy is misinformation." Confirmed
+    # positively expired (not just "dates not found" — see
+    # tests/intake/test_expiry.py for that distinction) must be caught the
+    # same way a wrong document type is: before a single span is produced.
+    class _HealthClassifier:
+        def classify(self, doc_id: str, raw_bytes: bytes) -> DocumentType:
+            return DocumentType.HEALTH_POLICY_WORDING
+
+    class _ExplodingSegmenter:
+        def segment(self, doc_id: str, raw_bytes: bytes) -> list[Span]:
+            raise AssertionError("segmentation ran on a document that should have been refused")
+
+    monkeypatch.setattr(decoder.orchestrator, "is_policy_expired", lambda raw_bytes: True)
+
+    with pytest.raises(UnusableDocumentError) as excinfo:
+        load_document("policy-001", b"irrelevant", _HealthClassifier(), _ExplodingSegmenter())
+    assert excinfo.value.doc_type == DocumentType.EXPIRED_POLICY
+    assert "expired" in str(excinfo.value).lower()
+
+
+def test_undetermined_expiry_does_not_block_analysis(monkeypatch: pytest.MonkeyPatch) -> None:
+    # The common real case (docs/HANDOVER.md §9.2, tests/intake/test_expiry
+    # .py): a specimen wording states no concrete dates at all. None must
+    # never be treated as "confirmed not expired" in a way that BLOCKS
+    # analysis, and it must equally never be treated as confirmed expired.
+    class _HealthClassifier:
+        def classify(self, doc_id: str, raw_bytes: bytes) -> DocumentType:
+            return DocumentType.HEALTH_POLICY_WORDING
+
+    class _TrivialSegmenter:
+        def segment(self, doc_id: str, raw_bytes: bytes) -> list[Span]:
+            return []
+
+    monkeypatch.setattr(decoder.orchestrator, "is_policy_expired", lambda raw_bytes: None)
+
+    document = load_document("policy-001", b"irrelevant", _HealthClassifier(), _TrivialSegmenter())
+    assert document.doc_type == DocumentType.HEALTH_POLICY_WORDING

@@ -26,7 +26,7 @@ from __future__ import annotations
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 
-from decoder.intake.classify import HeuristicDocumentClassifier
+from decoder.intake.classify import HeuristicDocumentClassifier, is_policy_expired
 from decoder.intake.interfaces import DocumentClassifier, DocumentType, Segmenter
 from decoder.intake.segment import PdfSegmenter
 from decoder.intake.span_store import InMemorySpanStore
@@ -47,6 +47,7 @@ from decoder.schema import (
     Span,
     SupportState,
 )
+from decoder.verify.continuity_requirement import attach_continuity_requirement
 from decoder.verify.decompose import OllamaDecomposer
 from decoder.verify.entailment import OllamaEntailer
 from decoder.verify.numeric_check import (
@@ -105,6 +106,16 @@ def load_document(
     a wrong-type document raises before a single span is produced."""
     classifier = classifier or HeuristicDocumentClassifier()
     doc_type = classifier.classify(doc_id, raw_bytes)
+
+    # §9.2: analysis of a lapsed policy is misinformation, so this check
+    # runs before the type gate below rather than after — an expired
+    # policy is caught the same way a wrong document type is, not as an
+    # afterthought once analysis has already started. Only overrides
+    # doc_type when expiry is POSITIVELY confirmed (never on None — §9.2
+    # forbids guessing "not expired" from an absence of dates).
+    if doc_type in ANALYSABLE_DOCUMENT_TYPES and is_policy_expired(raw_bytes) is True:
+        doc_type = DocumentType.EXPIRED_POLICY
+
     if doc_type not in ANALYSABLE_DOCUMENT_TYPES:
         raise UnusableDocumentError(doc_id, doc_type, UNUSABLE_DOCUMENT_MESSAGES[doc_type])
     segmenter = segmenter or PdfSegmenter()
@@ -139,13 +150,24 @@ class PolicyDecoder:
         situation: str,
         provided_inputs: Mapping[str, object] | None = None,
         derived_claims: Sequence[AtomicClaim] = (),
+        extra_resolved_claims: Sequence[ResolvedClaim] = (),
         on_progress: ProgressCallback | None = None,
     ) -> Answer:
         """`derived_claims` are DERIVED AtomicClaims built by code that
         already holds the real operand values (e.g. an extracted room-rent
         cap against a user-supplied tariff). They are deliberately not
         parsed out of the draft — see decoder.schema.DerivedOperation for
-        why — and are verified arithmetically rather than by entailment.
+        why — and are verified arithmetically rather than by entailment
+        here, through the usual per-claim resolution path.
+
+        `extra_resolved_claims` is a different shape for a different
+        reason: ResolvedClaims a caller has ALREADY fully resolved outside
+        this pipeline (decoder.extract.room_rent_limit is the first real
+        source — its cap claim is grounded directly in an extraction's own
+        span, not in anything retrieval would find for the user's
+        situational question, so re-running it through entailment here
+        would be both redundant and wrong). These are merged straight into
+        the answer, unmodified.
         """
         report = on_progress or _ignore_progress
         provided = dict(provided_inputs or {})
@@ -158,6 +180,11 @@ class PolicyDecoder:
 
         report(Progress("decomposing", "Splitting into checkable claims"))
         claims = self._decomposer.decompose(draft)
+        # §9.3: a waiting-period claim's applicability depends on
+        # continuous coverage, which decompose has no way to know about on
+        # its own — attached here, uniformly, regardless of which document
+        # or claim class produced the claim.
+        claims = attach_continuity_requirement(claims)
 
         # Non-DERIVED first, so a DERIVED claim's inputs already have
         # resolved states by the time it needs them (§8's DERIVED branch,
@@ -177,7 +204,7 @@ class PolicyDecoder:
             resolved.append(self._resolve_claim(claim, evidence, provided, states_by_claim_id))
 
         report(Progress("resolving", "Deciding what is actually supported", total, total))
-        return assemble_answer(resolved, provided)
+        return assemble_answer([*resolved, *extra_resolved_claims], provided)
 
     def _retrieve(self, documents: Sequence[LoadedDocument], situation: str) -> list[RetrievedSpan]:
         store = InMemorySpanStore()

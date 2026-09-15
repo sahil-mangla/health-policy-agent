@@ -69,6 +69,10 @@ async function init() {
 
   el("analyze").addEventListener("click", analyse);
   el("dialog-close").addEventListener("click", () => el("evidence-dialog").close());
+
+  const heroInputs = await fetch("/api/room-rent-inputs").then((r) => r.json());
+  el("room-tariff-note").textContent = heroInputs.room_tariff_per_day.description;
+  el("sum-insured-note").textContent = heroInputs.sum_insured.description;
 }
 
 function showDocNote() {
@@ -90,10 +94,13 @@ async function analyse() {
   setProgress({ detail: "Starting", completed: 0, total: 0 });
 
   try {
-    const started = await postJSON("/api/analyze", {
-      doc_id: el("doc-select").value,
-      situation,
-    });
+    const body = { doc_id: el("doc-select").value, situation };
+    const roomTariff = parseFloat(el("room-tariff").value);
+    const sumInsured = parseFloat(el("sum-insured").value);
+    if (Number.isFinite(roomTariff) && roomTariff > 0) body.room_tariff_per_day = roomTariff;
+    if (Number.isFinite(sumInsured) && sumInsured > 0) body.sum_insured = sumInsured;
+
+    const started = await postJSON("/api/analyze", body);
     const job = await pollUntilDone(started.job_id);
     if (job.status === "failed") {
       showError(`The analysis could not finish (${job.error}).`);
@@ -158,6 +165,8 @@ function render(answer) {
   chip.dataset.state = answer.overall_state;
   el("overall-explainer").textContent = STATE_MEANING[answer.overall_state] || "";
 
+  renderArithmetic(answer.room_rent_calculation);
+
   const claims = el("claims");
   claims.innerHTML = "";
   for (const claim of answer.claims) {
@@ -186,6 +195,48 @@ function render(answer) {
     inputs.appendChild(li);
   }
   el("inputs-panel").hidden = answer.missing_inputs.length === 0;
+}
+
+function renderArithmetic(calc) {
+  const panel = el("arithmetic-panel");
+  if (!calc) {
+    panel.hidden = true;
+    return;
+  }
+  panel.hidden = false;
+
+  const rupees = (value) => `₹${Math.round(value).toLocaleString("en-IN")}`;
+  const cells = [
+    ["Eligible limit", `${rupees(calc.eligible_limit_per_day)}/day`, null],
+  ];
+  if (calc.room_tariff_per_day != null) {
+    cells.push(["Your room tariff", `${rupees(calc.room_tariff_per_day)}/day`, null]);
+    cells.push([
+      calc.exceeds_limit ? "Exceeds limit by" : "Within limit by",
+      rupees(Math.abs(calc.room_tariff_per_day - calc.eligible_limit_per_day)),
+      calc.exceeds_limit ? "exceeds" : "within",
+    ]);
+  }
+  if (calc.deduction_ratio_percent != null) {
+    cells.push([
+      "Associated expenses payable",
+      `${calc.deduction_ratio_percent.toFixed(1)}%`,
+      "exceeds",
+    ]);
+  }
+
+  const grid = el("arithmetic-grid");
+  grid.innerHTML = "";
+  for (const [label, value, cls] of cells) {
+    const cell = document.createElement("div");
+    if (cls) cell.className = cls;
+    const dt = document.createElement("dt");
+    dt.textContent = label;
+    const dd = document.createElement("dd");
+    dd.textContent = value;
+    cell.append(dt, dd);
+    grid.appendChild(cell);
+  }
 }
 
 function renderClaim(claim) {

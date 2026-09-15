@@ -100,6 +100,36 @@ select:focus-visible, textarea:focus-visible, button:focus-visible {
 }
 .example-chip:hover { border-color: var(--accent); color: var(--accent); }
 
+.hero-inputs {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 10px 14px;
+  margin-bottom: 16px;
+}
+.hero-inputs summary {
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--ink-soft);
+}
+.hero-inputs[open] summary { margin-bottom: 12px; }
+.hero-inputs-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 14px;
+}
+@media (max-width: 520px) {
+  .hero-inputs-grid { grid-template-columns: 1fr; }
+}
+.hero-inputs input[type="number"] {
+  width: 100%;
+  font: inherit;
+  padding: 9px 11px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+}
+.field-note { display: block; font-size: 12px; color: var(--ink-soft); margin-top: 4px; }
+
 button.primary {
   font: inherit;
   font-weight: 600;
@@ -163,6 +193,34 @@ button.primary:disabled { opacity: 0.55; cursor: progress; }
 
 .verdict-line { display: flex; align-items: center; gap: 12px; margin: 10px 0 0; flex-wrap: wrap; }
 .verdict-explainer { color: var(--ink-soft); font-size: 14px; }
+
+/* §4 point 3: the arithmetic shown as labelled numbers, not prose. */
+.arithmetic-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 16px;
+  margin: 0;
+}
+.arithmetic-grid > div {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 12px 14px;
+  background: var(--bg);
+}
+.arithmetic-grid dt {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--ink-soft);
+  margin-bottom: 4px;
+}
+.arithmetic-grid dd {
+  margin: 0;
+  font-size: 20px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+.arithmetic-grid .exceeds dd { color: var(--conflict); }
+.arithmetic-grid .within dd { color: var(--supported); }
 
 .claims { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 10px; }
 .claim {

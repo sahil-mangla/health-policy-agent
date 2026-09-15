@@ -613,6 +613,24 @@ returns an empty list rather than fabricating one.
 Extraction metrics/CI and the annotated set are not started (still blocked
 on SPIKE-2).*
 
+*Update 2026-09-15 — two §9 gaps closed, both real correctness holes
+rather than routine extensions: (1) §9.2 expired-policy detection was
+previously unimplemented (`DocumentType.EXPIRED_POLICY` was a named enum
+member nothing ever produced) — a lapsed policy would have been analysed
+exactly like a valid one. `decoder/intake/classify.py` now has
+`is_policy_expired()`, wired into `load_document()`, which only overrides
+the classification on a POSITIVELY confirmed past end date — never on
+"dates not found" (the common real case: specimen wordings state no
+customer-specific dates at all, only a personal Schedule does). (2) §9.3's
+continuity-date requirement was also previously unimplemented — decompose
+never populates `required_inputs`, so a waiting-period claim could reach
+WELL_SUPPORTED purely on document text, with no way for a resolved answer
+to reflect that its applicability depends on unbroken coverage.
+`decoder/verify/continuity_requirement.py` now scans each decomposed
+claim's own text for waiting-period/pre-existing-disease language and
+attaches the requirement, uniformly, regardless of claim class or source
+document.*
+
 **M2 — Retrieval.**
 Hybrid retrieval over policy and CIS. Regulatory corpus stubbed.
 **DoD:** recall@k and contradiction recall reported on the eval set.
@@ -717,12 +735,56 @@ a wrong-type document (§9.1) is refused specifically before any analysis.
 Verified live against the real corpus (`tests/test_orchestrator_live.py`):
 an answerable question returns WELL_SUPPORTED claims whose deciding quotes
 are verbatim in real spans, and an unanswerable one abstains instead of
-inventing. The room-rent DERIVED arithmetic itself is NOT wired in yet —
-`answer()` accepts pre-built `derived_claims` for exactly that purpose, but
-nothing constructs the room-tariff comparison from an extracted cap plus a
-user-supplied tariff, so the hero scenario's own arithmetic screen does not
-exist yet and the ≥3-policies DoD is untested. Retrieval is lexical-only
-(dense is still stubbed), so recall is below what §10 requires.*
+inventing. Retrieval is lexical-only (dense is still stubbed), so recall is
+below what §10 requires.*
+
+*Update, same day: the room-rent arithmetic itself is now real —
+`decoder/extract/room_rent_limit.py`. It resolves the two regex-extracted
+components (%-of-SI, flat ₹/day) into one eligible ₹/day limit, taking the
+minimum when both are stated (the real compound clause reads "up to 2% of
+the sum insured subject to maximum of Rs.5000/-, per day" — whichever
+binds first depends on the actual sum insured, which is a per-policyholder
+choice the generic wording/CIS never states, modelled as a required input
+exactly like continuity_date), then compares it against a user-supplied
+room tariff and computes the proportionate-deduction ratio (§4 point 3).
+Both the cap fact and the comparison are constructed as real claims that
+go through `resolve()` like any other — the cap claim's evidence is the
+extraction's own span (no LLM call, §7.2's "code not model" already
+covered it via verbatim_match), the comparison's `derived_operation` is
+built from real operand values. Wired into the web UI as a dedicated
+"Room-rent arithmetic" panel with labelled numbers, plus optional room
+tariff / sum insured inputs — `web/app.py`'s `analyze_room_rent()` call.
+
+This exists because of a real, hand-verified confident-and-wrong instance
+(§12's headline harm case): asked for the room-rent limit, the system had
+reported the flat ₹5,000/day component and silently dropped that it only
+binds below a ₹2.5L sum insured — at ₹1L the real limit is ₹2,000.
+Re-verified live end to end through the browser with the real model after
+the fix: the computed claim now correctly reads "capped at 2% of sum
+insured or ₹5,000/day, whichever is lower — ₹2,000/day at your sum
+insured", with the arithmetic panel showing ₹2,000 eligible / ₹8,000
+actual / ₹6,000 excess / 25% payable.
+
+**Known remaining rough edge, not yet fixed:** the drafter's own answer to
+a direct "what is the room rent limit" question still appears as its own
+WELL_SUPPORTED claim reporting just the flat figure — the fix ADDS the
+correct computed claim alongside it, it does not suppress or correct the
+model's simpler one. Both are visible to the reader; the correct number is
+there, but a hasty reader could still land on the wrong claim first since
+it's listed earlier. Fixing this properly means either teaching the
+drafter never to state room-rent numbers itself (unreliable prompt
+engineering) or matching/suppressing decompose's overlapping claim by
+topic (a fragile heuristic) — neither is a clean five-minute fix, so it's
+recorded here rather than papered over.
+
+Two of the ≥3 required real policy structures were exercised in this pass
+(Arogya Sanjeevani: compound %-of-SI-with-flat-cap; Easy Health: no cap —
+correctly INSUFFICIENT_EVIDENCE, not "confirmed unlimited"), not yet three
+— Bajaj Health Guard Silver (pure %-of-SI, no flat component) is in the
+corpus but not yet run through this module. A pure flat-₹/day-only
+structure and the carve-out-list-absent case are still not covered at all
+(no such document in the starter corpus yet — corpus/README.md's own gap
+list). The DoD is not yet met.*
 
 *Two real defects were caught by running this rather than by reasoning
 about it, both now fixed. (1) Numeric `DOCUMENT_FACT` claims were being

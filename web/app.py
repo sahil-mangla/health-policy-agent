@@ -23,16 +23,23 @@ import uuid
 from dataclasses import dataclass, field
 from pathlib import Path
 from threading import Lock, Thread
-from typing import Any, Literal
+from typing import Literal
 
 from fastapi import FastAPI, HTTPException
 from fastapi.responses import FileResponse, Response
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
+from decoder.extract.room_rent_limit import (
+    ROOM_TARIFF_INPUT,
+    SUM_INSURED_INPUT,
+    RoomRentAnalysis,
+    analyze_room_rent,
+)
 from decoder.llm.interface import LLMClient
 from decoder.llm.ollama_client import OllamaLLMClient
-from decoder.orchestrator import PolicyDecoder, Progress, UnusableDocumentError
+from decoder.orchestrator import LoadedDocument, PolicyDecoder, Progress, UnusableDocumentError
+from decoder.respond.answer_assembly import render_claim_statement
 from decoder.respond.labels import SUPPORT_STATE_LABELS
 from decoder.respond.question_generation import generate_follow_up_questions
 from decoder.schema import Answer, EntailmentVerdict
@@ -51,6 +58,14 @@ FAKE_LLM_ENV_VAR = "POLICY_AGENT_FAKE_LLM"
 class AnalyzeRequest(BaseModel):
     doc_id: str
     situation: str = Field(min_length=1, max_length=2000)
+    # §4's hero scenario, both optional: without them the cap itself is
+    # still reported (or its absence is), just not compared against
+    # anything yet. See decoder.extract.room_rent_limit for why sum
+    # insured is a required INPUT here rather than an extracted field —
+    # it's a per-policyholder choice, not something the generic wording
+    # or CIS states.
+    room_tariff_per_day: float | None = Field(default=None, gt=0)
+    sum_insured: float | None = Field(default=None, gt=0)
 
 
 class JobStarted(BaseModel):
@@ -84,12 +99,26 @@ class ClaimOut(BaseModel):
     evidence: list[EvidenceOut]
 
 
+class RoomRentCalculationOut(BaseModel):
+    """§4 point 3: "show the arithmetic explicitly, with the input numbers
+    labelled." The underlying cap/comparison claims already appear in
+    `claims` with their citations — this is the same numbers laid out as
+    a labelled calculation rather than prose, for the UI's dedicated
+    arithmetic panel."""
+
+    eligible_limit_per_day: float | None
+    room_tariff_per_day: float | None
+    exceeds_limit: bool | None
+    deduction_ratio_percent: float | None
+
+
 class AnswerOut(BaseModel):
     overall_state: str
     overall_label: str
     claims: list[ClaimOut]
     questions: list[str]
     missing_inputs: list[dict[str, str]]
+    room_rent_calculation: RoomRentCalculationOut | None
     text: str | None
 
 
@@ -107,6 +136,7 @@ class _Job:
     status: str = "running"
     progress: Progress = field(default_factory=lambda: Progress("queued", "Starting"))
     answer: Answer | None = None
+    room_rent: RoomRentAnalysis | None = None
     error: str | None = None
 
 
@@ -137,6 +167,22 @@ def create_app() -> FastAPI:
             for entry in corpus_library.available()
         ]
 
+    @app.get("/api/room-rent-inputs")
+    def room_rent_inputs() -> dict[str, dict[str, str]]:
+        # Single source of truth for the two optional §4 inputs' help text
+        # — decoder.extract.room_rent_limit's own RequiredInput objects,
+        # not a copy the UI could drift from.
+        return {
+            "room_tariff_per_day": {
+                "name": ROOM_TARIFF_INPUT.name,
+                "description": ROOM_TARIFF_INPUT.description,
+            },
+            "sum_insured": {
+                "name": SUM_INSURED_INPUT.name,
+                "description": SUM_INSURED_INPUT.description,
+            },
+        }
+
     @app.post("/api/analyze")
     def start_analysis(request: AnalyzeRequest) -> JobStarted:
         try:
@@ -154,7 +200,13 @@ def create_app() -> FastAPI:
 
         Thread(
             target=_run_analysis,
-            args=(job, document, request.situation),
+            args=(
+                job,
+                document,
+                request.situation,
+                request.room_tariff_per_day,
+                request.sum_insured,
+            ),
             daemon=True,
         ).start()
         return JobStarted(job_id=job.job_id)
@@ -208,14 +260,30 @@ def _parse_bbox(raw: str | None) -> tuple[float, float, float, float] | None:
     return (x0, top, x1, bottom)
 
 
-def _run_analysis(job: _Job, document: Any, situation: str) -> None:
+def _run_analysis(
+    job: _Job,
+    document: LoadedDocument,
+    situation: str,
+    room_tariff_per_day: float | None,
+    sum_insured: float | None,
+) -> None:
     def report(progress: Progress) -> None:
         with _jobs_lock:
             job.progress = progress
 
     try:
+        # Cheap and deterministic (no LLM call) — runs unconditionally
+        # alongside whatever the user actually asked, per
+        # decoder.extract.room_rent_limit's own module docstring.
+        room_rent = analyze_room_rent(document.spans, room_tariff_per_day, sum_insured)
+        extra_resolved = [room_rent.cap_claim]
+        if room_rent.comparison_claim is not None:
+            extra_resolved.append(room_rent.comparison_claim)
+
         decoder = PolicyDecoder(_llm_client(), top_k=_top_k())
-        answer = decoder.answer([document], situation, on_progress=report)
+        answer = decoder.answer(
+            [document], situation, extra_resolved_claims=extra_resolved, on_progress=report
+        )
     except Exception as exc:  # noqa: BLE001 - surfaced to the caller as a failed job
         with _jobs_lock:
             job.status = "failed"
@@ -225,6 +293,7 @@ def _run_analysis(job: _Job, document: Any, situation: str) -> None:
 
     with _jobs_lock:
         job.answer = answer
+        job.room_rent = room_rent
         job.status = "done"
         job.progress = Progress("done", "Finished", job.progress.total, job.progress.total)
 
@@ -243,18 +312,39 @@ def _serialize_job(job: _Job) -> JobOut:
             completed=job.progress.completed,
             total=job.progress.total,
         ),
-        answer=_serialize_answer(job.answer) if job.answer is not None else None,
+        answer=_serialize_answer(job.answer, job.room_rent) if job.answer is not None else None,
         error=job.error,
     )
 
 
-def _serialize_answer(answer: Answer) -> AnswerOut:
+def _serialize_room_rent(room_rent: RoomRentAnalysis | None) -> RoomRentCalculationOut | None:
+    if room_rent is None or room_rent.eligible_limit_per_day is None:
+        # Nothing computable yet (no cap stated, or the cap needs a sum
+        # insured nobody supplied) — the cap claim itself still explains
+        # why, via the normal claims list; there's no calculation to show.
+        return None
+    exceeds = (
+        room_rent.room_tariff_per_day > room_rent.eligible_limit_per_day
+        if room_rent.room_tariff_per_day is not None
+        else None
+    )
+    return RoomRentCalculationOut(
+        eligible_limit_per_day=room_rent.eligible_limit_per_day,
+        room_tariff_per_day=room_rent.room_tariff_per_day,
+        exceeds_limit=exceeds,
+        deduction_ratio_percent=(
+            room_rent.deduction_ratio * 100 if room_rent.deduction_ratio is not None else None
+        ),
+    )
+
+
+def _serialize_answer(answer: Answer, room_rent: RoomRentAnalysis | None = None) -> AnswerOut:
     return AnswerOut(
         overall_state=answer.overall_state.value,
         overall_label=SUPPORT_STATE_LABELS[answer.overall_state],
         claims=[
             ClaimOut(
-                text=f"{r.claim.subject} {r.claim.predicate} {r.claim.value}",
+                text=render_claim_statement(r.claim),
                 state=r.state.value,
                 label=SUPPORT_STATE_LABELS[r.state],
                 claim_class=r.claim.claim_class.value,
@@ -278,6 +368,7 @@ def _serialize_answer(answer: Answer) -> AnswerOut:
             {"name": i.name, "value_type": i.value_type, "description": i.description}
             for i in answer.missing_inputs
         ],
+        room_rent_calculation=_serialize_room_rent(room_rent),
         text=answer.text,
     )
 

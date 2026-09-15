@@ -18,6 +18,7 @@ guessing here risks exactly the false confidence §9.2 warns against.
 from __future__ import annotations
 
 import re
+from datetime import date
 
 from decoder.intake.interfaces import DocumentType
 from decoder.intake.pdf_extract import extract_first_page_text
@@ -103,15 +104,72 @@ _POLICY_PERIOD_RE = re.compile(
 )
 
 
-def find_policy_period_dates(raw_bytes: bytes) -> tuple[str, str] | None:
+def find_policy_period_dates_in_text(text: str) -> tuple[str, str] | None:
     """Best-effort regex scan for a "Policy Period <start> to <end>" pattern,
     returning the raw matched date strings (not parsed/validated) or None if
     no such pattern is found. Callers needing an actual expiry determination
     (§9.2) should treat a None result as INSUFFICIENT_EVIDENCE, not as
     "not expired" — this function only ever confirms a pattern was found, it
-    never confirms one's absence means anything."""
-    text = extract_first_page_text(raw_bytes, max_pages=3)
+    never confirms one's absence means anything.
+
+    Split out from find_policy_period_dates() so the regex itself is
+    testable against plain strings, without needing a PDF fixture for
+    every case — is_policy_expired() below is the same split for the same
+    reason."""
     match = _POLICY_PERIOD_RE.search(text)
     if not match:
         return None
     return match.group(1), match.group(2)
+
+
+def find_policy_period_dates(raw_bytes: bytes) -> tuple[str, str] | None:
+    text = extract_first_page_text(raw_bytes, max_pages=3)
+    return find_policy_period_dates_in_text(text)
+
+
+def _parse_indian_date(raw: str) -> date | None:
+    """DD/MM/YYYY or DD-MM-YYYY, the convention _POLICY_PERIOD_RE's own
+    dates are always written in. Returns None — never a guess — for
+    anything it can't parse confidently: an out-of-range day/month, or a
+    2-digit year, which is genuinely ambiguous (is "10" 1910 or 2010?) and
+    not worth resolving by assumption for a check whose only job is
+    deciding whether to block analysis."""
+    for separator in ("/", "-"):
+        parts = raw.split(separator)
+        if len(parts) != 3:
+            continue
+        day_s, month_s, year_s = parts
+        if len(year_s) != 4:
+            return None
+        try:
+            return date(int(year_s), int(month_s), int(day_s))
+        except ValueError:
+            return None
+    return None
+
+
+def is_expired_from_text(text: str, as_of: date | None = None) -> bool | None:
+    """§9.2: "If the period has lapsed ... say so before any analysis."
+
+    Returns True only when a policy-period end date was found AND parsed
+    AND is unambiguously before `as_of` (default: today). Returns None —
+    never a guess — when the period wasn't found or couldn't be parsed;
+    the starter corpus's specimen wordings are the common real case for
+    this (docs/HANDOVER.md §9.2's own test: no customer-specific dates
+    exist in a downloadable specimen, only in a Schedule this system
+    doesn't have). A None result must never be treated as "not expired" —
+    it means this check could not be performed, which is a different fact.
+    """
+    period = find_policy_period_dates_in_text(text)
+    if period is None:
+        return None
+    _, end_raw = period
+    end_date = _parse_indian_date(end_raw)
+    if end_date is None:
+        return None
+    return end_date < (as_of or date.today())
+
+
+def is_policy_expired(raw_bytes: bytes, as_of: date | None = None) -> bool | None:
+    text = extract_first_page_text(raw_bytes, max_pages=3)
+    return is_expired_from_text(text, as_of)

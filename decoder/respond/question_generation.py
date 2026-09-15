@@ -16,7 +16,7 @@ from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
 
-from decoder.respond.answer_assembly import missing_inputs
+from decoder.respond.answer_assembly import missing_inputs, render_claim_statement
 from decoder.respond.labels import QUESTION_TEMPLATES
 from decoder.schema import ResolvedClaim, SupportState
 
@@ -44,7 +44,7 @@ def generate_follow_up_questions(
             # input, which is more specific than the claim text.
             continue
         claim = resolved.claim
-        questions.append(template.format(claim=f"{claim.subject} {claim.predicate} {claim.value}"))
+        questions.append(template.format(claim=render_claim_statement(claim)))
 
     return _deduped(questions)
 
