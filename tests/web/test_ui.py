@@ -191,3 +191,84 @@ def test_empty_situation_is_refused_without_calling_the_pipeline(page) -> None: 
     page.click("#analyze")
     page.wait_for_selector("#error-panel:not([hidden])")
     assert page.locator("#results").is_hidden()
+
+
+def test_upload_your_own_document_and_analyse_it(page) -> None:  # type: ignore[no-untyped-def]
+    # docs/HANDOVER.md's spec assumes a real uploaded policy throughout
+    # §9.1/§9.2/§9.3/§9.5 — this is that path actually reaching the browser,
+    # not just the bundled demo picker.
+    from web.corpus_library import entry_for
+
+    page.set_input_files("#upload-input", str(entry_for("easy_health").path))
+    page.wait_for_selector("#upload-status.ok", timeout=10_000)
+    selected = page.locator("#doc-select option:checked").inner_text()
+    assert "Your upload" in selected
+
+    _analyse(page, "What co-payment applies to my claim?")
+    assert page.locator(".claim").count() > 0
+
+
+def test_missing_input_form_lets_the_reader_supply_a_named_value_and_recheck(page) -> None:  # type: ignore[no-untyped-def]
+    # §8's UI-mapping table: NEEDS_INFORMATION must "name the missing input,
+    # offer to accept it" — an actual field, not a read-only list.
+    _analyse(page, "How long is the waiting period for pre-existing diseases?")
+    page.wait_for_selector("#inputs-panel:not([hidden])")
+    field = page.locator("#missing-input-continuity_date")
+    assert field.count() == 1
+
+    field.fill("2018-01-01")
+    page.click("#missing-inputs-form button[type=submit]")
+    # Not a second `#results:not([hidden])` wait — results are already
+    # visible from the first analysis, so that would resolve immediately
+    # without actually waiting for the re-check to land. The
+    # continuity_date field disappearing is specific to the SECOND
+    # response: it only leaves missing_inputs once resolve() sees it in
+    # provided_inputs.
+    page.wait_for_function(
+        "!document.getElementById('missing-input-continuity_date')", timeout=120_000
+    )
+
+    # Matched on .claim-text specifically, not .claim as a whole: the
+    # room-rent claim's own real cited evidence happens to be one long
+    # clause block that also contains the words "waiting period" later in
+    # the same passage (a real Arogya Sanjeevani compound clause), so a
+    # plain `.claim` has_text match would pick up that unrelated claim too.
+    waiting_claim = (
+        page.locator(".claim")
+        .filter(has=page.locator(".claim-text", has_text="waiting period"))
+        .first
+    )
+    assert waiting_claim.get_attribute("data-state") == "WELL_SUPPORTED"
+
+
+def test_chat_quick_actions_answer_from_already_verified_content(page) -> None:  # type: ignore[no-untyped-def]
+    # M6's status: chat is a scoped secondary affordance for exactly three
+    # uses, never a general-purpose "chat with your PDF" (out of scope, §2).
+    _analyse(page)
+    claim = page.locator(".claim").first
+    claim.locator(".claim-head").click()
+
+    claim.locator(".chat-chip", has_text="Why is this flagged?").click()
+    why_text = claim.locator(".why").inner_text().strip()
+    bubble = claim.locator(".chat-bubble.answer").first
+    assert bubble.inner_text().strip() == why_text
+
+    claim.locator(".chat-chip", has_text="Explain more simply").click()
+    page.wait_for_function(
+        "el => el.querySelectorAll('.chat-bubble.answer').length >= 2",
+        arg=claim.element_handle(),
+        timeout=10_000,
+    )
+
+
+def test_hindi_toggle_shows_translation_alongside_the_original_not_instead_of_it(page) -> None:  # type: ignore[no-untyped-def]
+    # §9.4: "Do not translate quoted clause text — show the original and
+    # the translation together."
+    _analyse(page)
+    claim = page.locator(".claim").first
+    claim.locator(".claim-head").click()
+    original = claim.locator(".claim-text").inner_text().strip()
+
+    claim.locator(".hindi-toggle").click()
+    page.wait_for_selector(".hindi-block", timeout=10_000)
+    assert claim.locator(".claim-text").inner_text().strip() == original

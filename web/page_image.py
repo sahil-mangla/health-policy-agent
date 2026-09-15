@@ -19,6 +19,12 @@ from pathlib import Path
 
 import pdfplumber
 
+PdfSource = Path | bytes
+"""Either a path to a bundled corpus file (web.corpus_library) or the raw
+bytes of a user-uploaded document (web.uploaded_documents) — an uploaded
+PDF has no on-disk path at all (§9.5: never written to disk), so this
+module has to accept both rather than assuming a path."""
+
 _RESOLUTION = 110
 _HIGHLIGHT = (255, 214, 0)
 _PAD = 2.0
@@ -40,14 +46,15 @@ class RenderedPage:
 
 
 def render_page_with_span(
-    pdf_path: Path,
+    pdf_source: PdfSource,
     page_number: int,
     bbox: tuple[float, float, float, float] | None,
 ) -> RenderedPage:
     """`page_number` is 1-indexed, matching Span.page. A None bbox renders
     the page unmarked rather than failing — a span without geometry is
     still worth showing the reader in context."""
-    with pdfplumber.open(pdf_path) as pdf:
+    opened = io.BytesIO(pdf_source) if isinstance(pdf_source, bytes) else pdf_source
+    with pdfplumber.open(opened) as pdf:
         if not 1 <= page_number <= len(pdf.pages):
             raise PageImageError(
                 f"page {page_number} is outside this document's 1..{len(pdf.pages)}"

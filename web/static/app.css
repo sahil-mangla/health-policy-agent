@@ -142,6 +142,39 @@ button.primary {
 }
 button.primary:disabled { opacity: 0.55; cursor: progress; }
 
+button.secondary {
+  font: inherit;
+  font-weight: 600;
+  font-size: 13px;
+  background: var(--surface);
+  color: var(--accent);
+  border: 1px solid var(--accent);
+  border-radius: 8px;
+  padding: 8px 16px;
+  cursor: pointer;
+}
+button.secondary:hover { background: var(--info-bg); }
+button.secondary:disabled { opacity: 0.55; cursor: progress; }
+
+/* Upload: a real path to analyse the reader's own policy, not just the
+   bundled demo picker. */
+.upload-row { margin: -6px 0 16px; }
+.upload-button {
+  display: inline-block;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--accent);
+  border: 1px dashed var(--accent);
+  border-radius: 8px;
+  padding: 8px 14px;
+  cursor: pointer;
+}
+.upload-button:hover { background: var(--info-bg); }
+.upload-row .field-note { display: block; margin-top: 6px; }
+.upload-status { margin: 8px 0 0; font-size: 13px; }
+.upload-status.ok { color: var(--supported); }
+.upload-status.error { color: var(--conflict); }
+
 /* Progress: reported by the pipeline, never invented here. */
 .progress-row { display: flex; align-items: center; gap: 10px; font-weight: 500; }
 .progress-note { margin: 10px 0 0; font-size: 13px; color: var(--ink-soft); }
@@ -295,9 +328,89 @@ button.primary:disabled { opacity: 0.55; cursor: progress; }
   text-decoration: underline;
 }
 
-.questions, .missing-inputs { margin: 0; padding-left: 20px; display: flex; flex-direction: column; gap: 8px; }
-.questions li, .missing-inputs li { font-size: 15px; }
-.missing-inputs .input-name { font-weight: 600; }
+.questions { margin: 0; padding-left: 20px; display: flex; flex-direction: column; gap: 8px; }
+.questions li { font-size: 15px; }
+
+/* §8's UI-mapping table: a NEEDS_INFORMATION claim must "name the missing
+   input, offer to accept it" — an actual field per input, not a read-only
+   list, so a name can genuinely be supplied and re-checked. */
+.missing-inputs { margin: 0; }
+.missing-inputs-fields {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  margin-bottom: 16px;
+}
+.missing-input-name { font-weight: 600; display: block; margin-bottom: 2px; }
+.missing-input-description { font-size: 13px; color: var(--ink-soft); margin: 0 0 6px; }
+.missing-inputs input, .missing-inputs select {
+  width: 100%;
+  max-width: 320px;
+  font: inherit;
+  padding: 9px 11px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+}
+
+/* Chat: a scoped secondary affordance for three specific questions, never
+   a general-purpose "chat with your PDF" (out of scope, §2). */
+.chat-actions { display: flex; flex-wrap: wrap; gap: 8px; margin: 4px 0 10px; }
+.chat-chip {
+  font: inherit;
+  font-size: 12px;
+  padding: 5px 11px;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  background: var(--surface);
+  color: var(--ink-soft);
+  cursor: pointer;
+}
+.chat-chip:hover { border-color: var(--accent); color: var(--accent); }
+.chat-chip:disabled { opacity: 0.5; cursor: default; }
+.chat-log { display: flex; flex-direction: column; gap: 8px; margin-bottom: 4px; }
+.chat-bubble { border-radius: 8px; padding: 8px 12px; font-size: 13.5px; max-width: 90%; }
+.chat-bubble.ask {
+  align-self: flex-start;
+  background: var(--bg);
+  color: var(--ink-soft);
+  font-style: italic;
+}
+.chat-bubble.answer {
+  align-self: flex-start;
+  background: var(--info-bg);
+  color: var(--ink);
+  border-left: 3px solid var(--info);
+}
+.chat-bubble.answer.error { background: var(--conflict-bg); border-left-color: var(--conflict); }
+
+/* Hindi: §9.4 — the original stays, a translation appears alongside it,
+   never in place of it. */
+.hindi-toggle {
+  font: inherit;
+  font-size: 12px;
+  color: var(--accent);
+  background: none;
+  border: 0;
+  padding: 0;
+  cursor: pointer;
+  text-decoration: underline;
+}
+.hindi-block {
+  margin-top: 8px;
+  padding: 8px 12px;
+  background: var(--bg);
+  border-radius: 8px;
+  font-size: 14px;
+}
+.hindi-block .hindi-label {
+  display: block;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--ink-soft);
+  margin-bottom: 4px;
+}
 
 .evidence-dialog {
   border: 0;

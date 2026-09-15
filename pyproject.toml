@@ -9,6 +9,10 @@ dependencies = [
     "google-genai>=1.0",
     "fastapi>=0.141.1",
     "uvicorn[standard]>=0.53.0",
+    # FastAPI's own runtime requirement for any multipart/form-data route
+    # (web/app.py's /api/upload) — not vendored, must be installed
+    # explicitly per FastAPI's own error message.
+    "python-multipart>=0.0.9",
     # Dense retrieval (decoder/retrieve/dense.py) is no longer optional —
     # docs/HANDOVER.md §10 requires hybrid retrieval for every answer, and
     # decoder.orchestrator.PolicyDecoder now retrieves through
@@ -36,6 +40,13 @@ extend-exclude = ["docs"]
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP", "B", "SIM"]
+
+[tool.ruff.lint.flake8-bugbear]
+# FastAPI's own documented dependency-injection idiom — `File(...)` (and
+# `Depends(...)`, `Query(...)`, etc.) as a parameter default is how it
+# recognizes what to inject, not the general "mutable default" footgun
+# B008 exists to catch.
+extend-immutable-calls = ["fastapi.File", "fastapi.Depends", "fastapi.Query"]
 
 [tool.mypy]
 # Mypy-only setting — does NOT change requires-python above (still >=3.11).

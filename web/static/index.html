@@ -25,6 +25,17 @@
     </label>
     <p id="doc-note" class="doc-note"></p>
 
+    <div class="upload-row">
+      <label class="upload-button" for="upload-input">
+        Or upload your own policy (PDF)
+        <input id="upload-input" type="file" accept="application/pdf" hidden>
+      </label>
+      <span class="field-note">
+        Stays in memory for this session only &mdash; never written to disk, never logged.
+      </span>
+      <p id="upload-status" class="upload-status" hidden></p>
+    </div>
+
     <label class="field">
       <span class="field-label">What do you want to know?</span>
       <textarea id="situation" rows="3"
@@ -102,7 +113,13 @@
 
     <div class="panel" id="inputs-panel" hidden>
       <h2>What we still need from you</h2>
-      <ul class="missing-inputs" id="missing-inputs"></ul>
+      <p class="panel-sub">
+        Add these and re-check &mdash; only the claims that depend on them change.
+      </p>
+      <form class="missing-inputs" id="missing-inputs-form">
+        <div class="missing-inputs-fields" id="missing-inputs-fields"></div>
+        <button type="submit" class="secondary">Add this and re-check</button>
+      </form>
     </div>
   </section>
 </main>

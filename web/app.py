@@ -23,9 +23,9 @@ import uuid
 from dataclasses import dataclass, field
 from pathlib import Path
 from threading import Lock, Thread
-from typing import Literal
+from typing import TYPE_CHECKING, Literal
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, File, HTTPException, UploadFile
 from fastapi.responses import FileResponse, Response
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
@@ -42,10 +42,16 @@ from decoder.orchestrator import LoadedDocument, PolicyDecoder, Progress, Unusab
 from decoder.respond.answer_assembly import render_claim_statement
 from decoder.respond.labels import SUPPORT_STATE_LABELS
 from decoder.respond.question_generation import generate_follow_up_questions
+from decoder.respond.simplify import simplify_claim_statement
+from decoder.respond.translate import NumericFidelityError
 from decoder.retrieve.dense import EmbeddingModel
 from decoder.schema import Answer, EntailmentVerdict
-from web import corpus_library
-from web.page_image import PageImageError, render_page_with_span
+from web import corpus_library, uploaded_documents
+from web.page_image import PageImageError, PdfSource, render_page_with_span
+from web.uploaded_documents import UploadTooLargeError
+
+if TYPE_CHECKING:
+    from decoder.respond.translate import GeminiHindiTranslator
 
 STATIC_DIR = Path(__file__).resolve().parent / "static"
 
@@ -67,6 +73,34 @@ class AnalyzeRequest(BaseModel):
     # or CIS states.
     room_tariff_per_day: float | None = Field(default=None, gt=0)
     sum_insured: float | None = Field(default=None, gt=0)
+    # §8's UI-mapping table: a NEEDS_INFORMATION claim must "name the
+    # missing input, offer to accept it" — generic, not limited to the two
+    # hero-scenario inputs above. Keyed by RequiredInput.name (e.g.
+    # "continuity_date", §9.3), values always strings: resolve() only
+    # checks that the name is present in provided_inputs, never interprets
+    # the value itself, so the UI doesn't need per-type parsing here.
+    provided_inputs: dict[str, str] = Field(default_factory=dict)
+
+
+class UploadOut(BaseModel):
+    doc_id: str
+    filename: str
+
+
+class TranslateRequest(BaseModel):
+    text: str = Field(min_length=1, max_length=2000)
+
+
+class TranslateOut(BaseModel):
+    translation: str
+
+
+class SimplifyRequest(BaseModel):
+    text: str = Field(min_length=1, max_length=2000)
+
+
+class SimplifyOut(BaseModel):
+    simplified: str
 
 
 class JobStarted(BaseModel):
@@ -174,6 +208,33 @@ def _embedding_model() -> EmbeddingModel:
     return _embedding_model_cache
 
 
+class TranslationUnavailableError(RuntimeError):
+    """Raised when Hindi translation can't run right now — no configured
+    API key, or the provider itself is unreachable — as opposed to
+    NumericFidelityError, which means it ran and its output was rejected."""
+
+
+def _translator() -> GeminiHindiTranslator:
+    """Returns a decoder.respond.translate.GeminiHindiTranslator, real or
+    scripted. Built fresh per call (cheap — an LLMClient connects lazily,
+    same as `_llm_client()`) rather than cached, since
+    GeminiAPIKeyMissingError needs to surface on every call it's missing,
+    not just the first."""
+    from decoder.respond.translate import GeminiHindiTranslator
+
+    if os.environ.get(FAKE_LLM_ENV_VAR):
+        from web.fake_llm import ScriptedLLMClient
+
+        return GeminiHindiTranslator(ScriptedLLMClient())
+
+    from decoder.llm.gemini_client import GeminiAPIKeyMissingError, GeminiLLMClient
+
+    try:
+        return GeminiHindiTranslator(GeminiLLMClient())
+    except GeminiAPIKeyMissingError as exc:
+        raise TranslationUnavailableError(str(exc)) from exc
+
+
 def create_app() -> FastAPI:
     app = FastAPI(title="Health Policy Decoder")
 
@@ -205,10 +266,25 @@ def create_app() -> FastAPI:
             },
         }
 
+    @app.post("/api/upload")
+    async def upload_document(file: UploadFile = File(...)) -> UploadOut:
+        """A real upload path alongside the bundled demo picker — see
+        web.uploaded_documents' own module docstring for why this exists.
+        Validated immediately (§9.1's refusal path), before the reader has
+        even typed a situation, and never written to disk (§9.5)."""
+        raw = await file.read()
+        try:
+            entry = uploaded_documents.add(file.filename or "uploaded.pdf", raw)
+        except UploadTooLargeError as exc:
+            raise HTTPException(status_code=413, detail=str(exc)) from None
+        except UnusableDocumentError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from None
+        return UploadOut(doc_id=entry.doc_id, filename=entry.filename)
+
     @app.post("/api/analyze")
     def start_analysis(request: AnalyzeRequest) -> JobStarted:
         try:
-            document = corpus_library.get(request.doc_id)
+            document = _resolve_document(request.doc_id)
         except KeyError:
             raise HTTPException(status_code=404, detail="Unknown document") from None
         except UnusableDocumentError as exc:
@@ -228,6 +304,7 @@ def create_app() -> FastAPI:
                 request.situation,
                 request.room_tariff_per_day,
                 request.sum_insured,
+                request.provided_inputs,
             ),
             daemon=True,
         ).start()
@@ -246,11 +323,11 @@ def create_app() -> FastAPI:
         """`bbox` is "x0,top,x1,bottom" in PDF points, straight from the
         Span the reader clicked — §8's evidence path ends here."""
         try:
-            entry = corpus_library.entry_for(doc_id)
+            pdf_source = _resolve_pdf_source(doc_id)
         except KeyError:
             raise HTTPException(status_code=404, detail="Unknown document") from None
         try:
-            rendered = render_page_with_span(entry.path, page, _parse_bbox(bbox))
+            rendered = render_page_with_span(pdf_source, page, _parse_bbox(bbox))
         except PageImageError as exc:
             raise HTTPException(status_code=404, detail=str(exc)) from None
         headers = {}
@@ -261,12 +338,57 @@ def create_app() -> FastAPI:
             headers["Access-Control-Expose-Headers"] = "X-Highlight-Fraction"
         return Response(content=rendered.png, media_type="image/png", headers=headers)
 
+    @app.post("/api/translate")
+    def translate(request: TranslateRequest) -> TranslateOut:
+        """§9.4: "output must be translatable... Do not translate quoted
+        clause text — show the original and the translation together."
+        Only ever called with a claim's own rendered statement, never a
+        document span — the browser is responsible for that boundary, same
+        as decoder.respond.translate's own module docstring requires of
+        every caller."""
+        try:
+            translation = _translator().translate(request.text)
+        except TranslationUnavailableError as exc:
+            raise HTTPException(status_code=503, detail=str(exc)) from None
+        except NumericFidelityError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from None
+        return TranslateOut(translation=translation)
+
+    @app.post("/api/claims/simplify")
+    def simplify(request: SimplifyRequest) -> SimplifyOut:
+        """The "simpler language" chat quick-action — one of the three
+        scoped uses M6's status names for chat as a secondary affordance,
+        never a general-purpose chatbot (§2)."""
+        try:
+            simplified = simplify_claim_statement(_llm_client(), request.text)
+        except NumericFidelityError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from None
+        return SimplifyOut(simplified=simplified)
+
     @app.get("/")
     def index() -> FileResponse:
         return FileResponse(STATIC_DIR / "index.html")
 
     app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
     return app
+
+
+def _resolve_document(doc_id: str) -> LoadedDocument:
+    """Routes to whichever store actually holds `doc_id` — the bundled demo
+    corpus (web.corpus_library) or a real upload (web.uploaded_documents).
+    Raises KeyError for an unknown id in either case, and
+    UnusableDocumentError (§9.1) if a corpus lookup's lazy load hits a
+    wrong-type file — an uploaded document was already validated at upload
+    time, so that exception can only originate from the corpus path."""
+    if uploaded_documents.is_upload_id(doc_id):
+        return uploaded_documents.get(doc_id).document
+    return corpus_library.get(doc_id)
+
+
+def _resolve_pdf_source(doc_id: str) -> PdfSource:
+    if uploaded_documents.is_upload_id(doc_id):
+        return uploaded_documents.get(doc_id).raw_bytes
+    return corpus_library.entry_for(doc_id).path
 
 
 def _parse_bbox(raw: str | None) -> tuple[float, float, float, float] | None:
@@ -288,6 +410,7 @@ def _run_analysis(
     situation: str,
     room_tariff_per_day: float | None,
     sum_insured: float | None,
+    provided_inputs: dict[str, str],
 ) -> None:
     def report(progress: Progress) -> None:
         with _jobs_lock:
@@ -304,7 +427,11 @@ def _run_analysis(
 
         decoder = PolicyDecoder(_llm_client(), top_k=_top_k(), embedding_model=_embedding_model())
         answer = decoder.answer(
-            [document], situation, extra_resolved_claims=extra_resolved, on_progress=report
+            [document],
+            situation,
+            provided_inputs=provided_inputs,
+            extra_resolved_claims=extra_resolved,
+            on_progress=report,
         )
     except Exception as exc:  # noqa: BLE001 - surfaced to the caller as a failed job
         with _jobs_lock:

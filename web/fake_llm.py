@@ -22,15 +22,35 @@ from decoder.llm.interface import LLMClient
 
 DRAFT = "The policy applies a co-payment of 5% to every admissible claim."
 
-# Two claims: one the scripted entailer will ground (so the UI has a
-# WELL_SUPPORTED row to render) and one it never will (so the UI also has
-# an unsupported row, and therefore a follow-up question, to render).
+# Three claims: one the scripted entailer will ground (so the UI has a
+# WELL_SUPPORTED row to render), one it never will (so the UI also has an
+# unsupported row, and therefore a follow-up question, to render), and one
+# whose text mentions a waiting period — decoder.verify.continuity_requirement
+# attaches CONTINUITY_DATE (§9.3) to any claim matching that language,
+# regardless of which document produced it, so this exercises the generic
+# "offer to accept a named missing input" path
+# (AnalyzeRequest.provided_inputs) end to end without needing a live model.
 CLAIMS = (
     "CLAIM: the policy | applies a co-payment of | 5% | DOCUMENT_FACT\n"
-    "CLAIM: the policy | covers | overseas dental implants | DOCUMENT_FACT"
+    "CLAIM: the policy | covers | overseas dental implants | DOCUMENT_FACT\n"
+    # Value deliberately non-numeric ("applies", not "36 months") — a
+    # numeric DOCUMENT_FACT claim also needs its exact value to appear
+    # verbatim in the deciding quote to reach WELL_SUPPORTED (§7.2's
+    # numeric-verbatim check), which the span this actually retrieves
+    # doesn't state; a non-numeric value keeps this test about
+    # continuity_date wiring, not that separate check.
+    "CLAIM: the policy | states a waiting period for pre-existing diseases | "
+    "applies | DOCUMENT_FACT"
 )
 
 GROUNDED_QUOTE = "Co-payment"
+# A real Arogya Sanjeevani clause's own wording, confirmed by hand
+# (2026-09-15) to be the top hybrid-retrieval hit for "How long is the
+# waiting period for pre-existing diseases?" — unlike
+# tests/extract/test_llm_extractor.py's "36months" clause, which exists in
+# the same document but isn't what top_k retrieval for this question
+# actually surfaces, so grounding on it here would silently test nothing.
+WAITING_PERIOD_QUOTE = "waiting period specified for pre-existing diseases"
 
 
 class ScriptedLLMClient(LLMClient):
@@ -39,17 +59,28 @@ class ScriptedLLMClient(LLMClient):
             return CLAIMS
         if "strict fact-checker" in system:
             return self._entail(prompt)
+        if "translate English" in system:
+            # Deterministic and trivially numeric-fidelity-safe (every
+            # figure in `prompt` survives unchanged) — real Hindi fluency
+            # isn't the point of these tests, wiring is.
+            return f"[HI] {prompt}"
+        if "rewrite a short factual statement" in system:
+            return f"[SIMPLE] {prompt}"
         return DRAFT
 
     @staticmethod
     def _entail(prompt: str) -> str:
-        """Grounds the co-payment claim only when the span it was handed
-        actually contains the word — so the verdict still depends on real
-        retrieved text, and a span that doesn't mention it correctly comes
-        back NEUTRAL instead of being rubber-stamped."""
+        """Grounds the co-payment and waiting-period claims only when the
+        span it was handed actually contains the matching text — so each
+        verdict still depends on real retrieved text, and a span that
+        doesn't mention it correctly comes back NEUTRAL instead of being
+        rubber-stamped."""
         claim_line, _, passage = prompt.partition("Passage:")
-        if "co-payment" in claim_line.lower() and GROUNDED_QUOTE in passage:
+        lower = claim_line.lower()
+        if "co-payment" in lower and GROUNDED_QUOTE in passage:
             return f"VERDICT: SUPPORTS\nQUOTE: {GROUNDED_QUOTE}"
+        if "waiting period" in lower and WAITING_PERIOD_QUOTE in passage:
+            return f"VERDICT: SUPPORTS\nQUOTE: {WAITING_PERIOD_QUOTE}"
         return "VERDICT: NEUTRAL\nQUOTE: NONE"
 
 

@@ -956,6 +956,71 @@ eval set (§11/§12) needs to be able to catch, and it argues for the hero
 scenario's arithmetic being computed from extracted fields rather than
 summarised in prose by the drafter.*
 
+*Update 2026-09-15: four real gaps between this spec and the running
+frontend, found by checking the UI against §8/§9/M6 directly rather than
+assuming "the analysis view is done" meant everything in it was, are now
+closed:*
+
+- *Document upload (`web/uploaded_documents.py`, `POST /api/upload`).
+  §9.1/§9.2/§9.3/§9.5 are all written assuming a real uploaded policy, but
+  the running app could only ever analyse the 5 bundled demo documents —
+  there was no upload path at all. Raw bytes and the segmented document
+  live in memory for the life of the process only (§9.5 — never written to
+  disk), reusing the same §9.1 refusal path a bundled document goes
+  through (`decoder.orchestrator.load_document`), plus a new case that
+  path didn't previously need to handle: a file that isn't a parseable PDF
+  at all (`pdfplumber.utils.exceptions.PdfminerException`, distinct from a
+  scanned-but-genuine PDF's empty-text UNREADABLE_SCAN path), mapped to
+  the same "no readable text" message. `web/page_image.py` now accepts raw
+  bytes as well as a corpus path, since an upload has no on-disk file to
+  point at.*
+- *The generic "offer to accept" a missing input (§8's UI-mapping table:
+  NEEDS_INFORMATION must "name the missing input, offer to accept it" —
+  previously only true for the two hardcoded room-rent inputs).
+  `AnalyzeRequest.provided_inputs` is now a real, generic field threaded
+  through to `PolicyDecoder.answer()`, and the missing-inputs panel is a
+  real form (one field per named input, typed from `RequiredInput.
+  value_type`) rather than a read-only list — tested against
+  `continuity_date` (§9.3), the first required input that wasn't one of
+  the two room-rent ones. Caught a real UX bug before shipping: every
+  field was marked HTML `required`, so a reader who only wanted to answer
+  ONE named input (leaving an unrelated one, e.g. `sum_insured`, blank)
+  had the browser's native form validation silently block the submit
+  entirely — fixed by not requiring fields, since resolve() already
+  handles partial `provided_inputs` correctly.*
+- *Hindi translation reaching the browser at all (§9.4: "output must be
+  translatable... show the original and the translation together").
+  `decoder/respond/translate.py`'s `GeminiHindiTranslator` was real and
+  tested but had zero callers outside its own test file — `POST
+  /api/translate` and a per-claim "हिंदी में देखें" toggle now reach it,
+  appending the translation alongside the English original rather than
+  replacing it, exactly as §9.4 requires. Not live-verified against a real
+  Gemini API key in this pass (none configured in this environment) — the
+  scripted-model path is fully tested, and a missing/invalid key now fails
+  clearly (503, via `GeminiAPIKeyMissingError`) rather than crashing;
+  real-key verification is still open.*
+- *The "simpler language" chat quick-action (M6's own status: chat is a
+  scoped secondary affordance for exactly three uses — "why is this
+  flagged," "show me the clause," "simpler language" — never a
+  general-purpose "chat with your PDF," out of scope per §2). The other
+  two were already effectively answered by existing UI (the claim
+  disclosure's own explanation; the evidence dialog), so each claim now
+  gets three chat quick-actions reusing that; only "simpler language" was
+  net-new, via `decoder/respond/simplify.py` (new — rewords an
+  ALREADY-resolved claim statement, never a document span, under the same
+  numeric-fidelity guarantee `decoder.respond.translate` uses) and `POST
+  /api/claims/simplify`.*
+
+*All four verified two ways: `tests/web/test_api.py`/`test_ui.py` (20 new
+tests, scripted model) and by hand through a live Chromium browser session
+against the real running app (upload a real corpus PDF and analyse it,
+supply a named missing input and get a re-checked WELL_SUPPORTED claim,
+use all three chat quick-actions, toggle the Hindi translation) — the
+missing-inputs `required` bug above was caught during that hand
+verification, not by the automated tests, which is itself worth recording:
+automated coverage existed for the wiring but not for the specific native-
+HTML-validation interaction that silently blocked it.*
+
 ---
 
 ## 15. Open decisions `SPIKE`

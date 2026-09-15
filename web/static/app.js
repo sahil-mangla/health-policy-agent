@@ -39,6 +39,11 @@ const el = (id) => document.getElementById(id);
 const POLL_MS = 400;
 
 let documents = [];
+// §8's UI-mapping table: a NEEDS_INFORMATION claim must "name the missing
+// input, offer to accept it." Accumulates what the reader has supplied via
+// the missing-inputs form across re-checks of the SAME situation; reset
+// whenever a fresh "Analyse" click starts a genuinely new question.
+let extraProvidedInputs = {};
 
 async function init() {
   const res = await fetch("/api/documents");
@@ -67,12 +72,67 @@ async function init() {
     examples.appendChild(chip);
   }
 
-  el("analyze").addEventListener("click", analyse);
+  el("analyze").addEventListener("click", () => {
+    extraProvidedInputs = {};
+    analyse();
+  });
   el("dialog-close").addEventListener("click", () => el("evidence-dialog").close());
+
+  el("missing-inputs-form").addEventListener("submit", (event) => {
+    event.preventDefault();
+    for (const [name, value] of new FormData(event.target).entries()) {
+      if (value) extraProvidedInputs[String(name)] = String(value);
+    }
+    analyse();
+  });
+
+  setupUpload();
 
   const heroInputs = await fetch("/api/room-rent-inputs").then((r) => r.json());
   el("room-tariff-note").textContent = heroInputs.room_tariff_per_day.description;
   el("sum-insured-note").textContent = heroInputs.sum_insured.description;
+}
+
+function setupUpload() {
+  el("upload-input").addEventListener("change", async (event) => {
+    const input = /** @type {HTMLInputElement} */ (event.target);
+    const file = input.files && input.files[0];
+    if (!file) return;
+
+    const status = el("upload-status");
+    status.hidden = false;
+    status.className = "upload-status";
+    status.textContent = "Uploading…";
+
+    try {
+      const formData = new FormData();
+      formData.append("file", file);
+      const res = await fetch("/api/upload", { method: "POST", body: formData });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.detail || `Upload failed (${res.status})`);
+
+      const option = document.createElement("option");
+      option.value = data.doc_id;
+      option.textContent = `Your upload — ${data.filename}`;
+      el("doc-select").appendChild(option);
+      el("doc-select").value = data.doc_id;
+      documents.push({
+        doc_id: data.doc_id,
+        insurer: "Your upload",
+        product: data.filename,
+        note: "Not stored beyond this session.",
+      });
+      showDocNote();
+
+      status.className = "upload-status ok";
+      status.textContent = `Uploaded "${data.filename}" — selected above.`;
+    } catch (err) {
+      status.className = "upload-status error";
+      status.textContent = String(err.message || err);
+    } finally {
+      input.value = "";
+    }
+  });
 }
 
 function showDocNote() {
@@ -94,7 +154,7 @@ async function analyse() {
   setProgress({ detail: "Starting", completed: 0, total: 0 });
 
   try {
-    const body = { doc_id: el("doc-select").value, situation };
+    const body = { doc_id: el("doc-select").value, situation, provided_inputs: extraProvidedInputs };
     const roomTariff = parseFloat(el("room-tariff").value);
     const sumInsured = parseFloat(el("sum-insured").value);
     if (Number.isFinite(roomTariff) && roomTariff > 0) body.room_tariff_per_day = roomTariff;
@@ -183,18 +243,45 @@ function render(answer) {
   }
   el("questions-panel").hidden = answer.questions.length === 0;
 
-  const inputs = el("missing-inputs");
-  inputs.innerHTML = "";
-  for (const input of answer.missing_inputs) {
-    const li = document.createElement("li");
-    const name = document.createElement("span");
-    name.className = "input-name";
-    name.textContent = input.name;
-    li.appendChild(name);
-    li.appendChild(document.createTextNode(` — ${input.description}`));
-    inputs.appendChild(li);
+  renderMissingInputs(answer.missing_inputs);
+}
+
+function inputTypeFor(valueType) {
+  if (valueType === "date") return "date";
+  if (valueType === "int" || valueType === "float") return "number";
+  return "text";
+}
+
+function renderMissingInputs(missingInputs) {
+  const fields = el("missing-inputs-fields");
+  fields.innerHTML = "";
+  for (const input of missingInputs) {
+    const wrap = document.createElement("div");
+
+    const label = document.createElement("label");
+    label.className = "missing-input-name";
+    label.textContent = input.name;
+    label.setAttribute("for", `missing-input-${input.name}`);
+
+    const description = document.createElement("p");
+    description.className = "missing-input-description";
+    description.textContent = input.description;
+
+    const field = document.createElement("input");
+    field.type = inputTypeFor(input.value_type);
+    field.id = `missing-input-${input.name}`;
+    field.name = input.name;
+    // Deliberately not `required`: several unrelated claims can each be
+    // missing a different named input at once (e.g. sum_insured for the
+    // room-rent panel, continuity_date for a waiting-period claim), and a
+    // reader answering just one of them should be able to re-check
+    // immediately rather than being blocked until every field is filled.
+    if (extraProvidedInputs[input.name]) field.value = extraProvidedInputs[input.name];
+
+    wrap.append(label, description, field);
+    fields.appendChild(wrap);
   }
-  el("inputs-panel").hidden = answer.missing_inputs.length === 0;
+  el("inputs-panel").hidden = missingInputs.length === 0;
 }
 
 function renderArithmetic(calc) {
@@ -276,6 +363,9 @@ function renderClaim(claim) {
     body.appendChild(renderEvidence(claim.evidence));
   }
 
+  body.appendChild(renderHindiToggle(claim));
+  body.appendChild(renderChat(claim));
+
   head.addEventListener("click", () => {
     body.hidden = !body.hidden;
     head.setAttribute("aria-expanded", String(!body.hidden));
@@ -284,6 +374,122 @@ function renderClaim(claim) {
 
   li.append(head, body);
   return li;
+}
+
+/* Chat: a scoped secondary affordance for exactly three uses this project's
+   own spec names — "why is this flagged", "show me the clause", "simpler
+   language" — never a general-purpose "chat with your PDF" (out of scope,
+   §2). Each button either reuses information already on the page (no new
+   claim, no new risk of an ungrounded statement) or calls a narrow
+   endpoint that rewords ALREADY-verified text under the same
+   numeric-fidelity guarantee §9.4's translation uses. */
+function renderChat(claim) {
+  const wrap = document.createElement("div");
+  const actions = document.createElement("div");
+  actions.className = "chat-actions";
+  const log = document.createElement("div");
+  log.className = "chat-log";
+
+  const chips = [
+    makeChatChip("Why is this flagged?", () => {
+      addChatBubble(log, "ask", "Why is this flagged?");
+      addChatBubble(log, "answer", STATE_MEANING[claim.state] || "No explanation available.");
+    }),
+    makeChatChip("Show me the clause", () => {
+      addChatBubble(log, "ask", "Show me the clause");
+      if (claim.evidence.length > 0) {
+        openEvidence(claim.evidence[0]);
+      } else {
+        addChatBubble(
+          log,
+          "answer",
+          "There is nothing to show — no clause was found to check this against.",
+          true
+        );
+      }
+    }),
+    makeChatChip("Explain more simply", async (chip) => {
+      addChatBubble(log, "ask", "Explain more simply");
+      chip.disabled = true;
+      try {
+        const res = await postJSON("/api/claims/simplify", { text: claim.text });
+        addChatBubble(log, "answer", res.simplified);
+      } catch (err) {
+        addChatBubble(
+          log,
+          "answer",
+          `Could not simplify this right now (${err.message || err}).`,
+          true
+        );
+      } finally {
+        chip.disabled = false;
+      }
+    }),
+  ];
+  if (claim.evidence.length === 0) chips[1].disabled = true;
+
+  actions.append(...chips);
+  wrap.append(actions, log);
+  return wrap;
+}
+
+function makeChatChip(label, onClick) {
+  const chip = document.createElement("button");
+  chip.type = "button";
+  chip.className = "chat-chip";
+  chip.textContent = label;
+  chip.addEventListener("click", () => onClick(chip));
+  return chip;
+}
+
+function addChatBubble(log, kind, text, isError) {
+  const bubble = document.createElement("div");
+  bubble.className = `chat-bubble ${kind}${isError ? " error" : ""}`;
+  bubble.textContent = text;
+  log.appendChild(bubble);
+}
+
+/* Hindi: §9.4 — "output must be translatable... Do not translate quoted
+   clause text — show the original and the translation together." The
+   English original (claim.text, in the always-visible claim head) is
+   never replaced, only supplemented. */
+function renderHindiToggle(claim) {
+  const wrap = document.createElement("div");
+  const button = document.createElement("button");
+  button.type = "button";
+  button.className = "hindi-toggle";
+  button.textContent = "हिंदी में देखें";
+
+  let block = null;
+  button.addEventListener("click", async () => {
+    if (block) {
+      block.hidden = !block.hidden;
+      button.textContent = block.hidden ? "हिंदी में देखें" : "Hide Hindi";
+      return;
+    }
+    button.disabled = true;
+    try {
+      const res = await postJSON("/api/translate", { text: claim.text });
+      block = document.createElement("div");
+      block.className = "hindi-block";
+      const label = document.createElement("span");
+      label.className = "hindi-label";
+      label.textContent = "Hindi translation";
+      const translated = document.createElement("p");
+      translated.style.margin = "0";
+      translated.textContent = res.translation;
+      block.append(label, translated);
+      wrap.appendChild(block);
+      button.textContent = "Hide Hindi";
+    } catch (err) {
+      button.textContent = `Hindi unavailable (${err.message || err})`;
+    } finally {
+      button.disabled = false;
+    }
+  });
+
+  wrap.appendChild(button);
+  return wrap;
 }
 
 function renderEvidence(evidence) {
