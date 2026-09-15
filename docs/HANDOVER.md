@@ -574,11 +574,43 @@ category this project needs — room-rent/proportionate-deduction, co-payment,
 pre-existing-disease/waiting-period, and a genuinely sharp adversarial case
 (Jacob Punnen v. United India Insurance, decided by the Supreme Court) about
 an insurer silently changing a sub-limit clause at renewal, directly on
-point for this project's own §9.3 continuity concerns. Not yet a full
-20-case classification — that, plus a hunt for the two structures the
-policy-document corpus itself is still missing (room-category eligibility,
-pure flat-₹/day cap), is the concrete next step before this can be called
-resolved rather than promising.*
+point for this project's own §9.3 continuity concerns. Extended same day to
+18 of a target 20 real cases classified (`docs/corpus/ncdrc-feasibility.md`),
+still short of a full 20 by 2 and of a systematic per-judgment
+non-prohibition check, but no longer just a first pass.*
+
+*Update, same day (third pass): `decoder/eval/` now holds a real, running
+annotated eval set — 17 cases (`decoder/eval/cases.py`), 8 of them
+`correctly_abstain`, meeting M0's "≥8 correctly-abstain" floor exactly
+though short of the full 30. Each case's numbers are inspired by the real
+NCDRC fact patterns above but run against a REAL document already in
+`corpus/raw/` through the actual `PolicyDecoder.answer()` pipeline — the
+litigation judgments never publish the underlying policy PDF, so this
+sidesteps that gap entirely rather than trying to reconstruct one.
+Every case has been run for real against the live local model
+(`tests/eval/test_eval_set_live.py`, skip-guarded like every other live
+test in this project): all 8 `correctly_abstain` cases pass (§12's
+headline "appropriate abstention" metric, 100% on this sample), and the
+run caught a real crash — a DERIVED claim decompose classifies from free
+text without extractable operands (documented as a known possibility in
+`decoder.verify.decompose`'s own docstring) was reaching
+`entailment_result_for_derived_claim` and raising a bare `AssertionError`
+that took down the entire `answer()` call, because that function had its
+own premature, redundant assert shadowing the documented
+`MissingDerivedOperationError` it was supposed to let through. Fixed in
+`decoder/verify/numeric_check.py` (call `verify_derived_claim` first) and
+`decoder/orchestrator.py` (catch the exception, resolve to
+INSUFFICIENT_EVIDENCE instead of crashing) — this is exactly the kind of
+finding an eval harness driving the real pipeline is supposed to catch,
+and did, on its first real run. One further finding is left open rather
+than quietly fixed: the live model was observed characterizing a real,
+correctly-grounded 5% co-payment clause as "the policy has a 5% discount"
+— the number and citation are right, the label is backwards (a co-payment
+is what the policyholder pays, not a price reduction). Reproduced
+consistently on rerun, not a one-off sampling fluke. Recorded in
+`decoder/eval/cases.py`'s own case note as a real drafting-quality gap
+worth its own investigation, deliberately left failing rather than the
+eval case being loosened to accept the wrong label.*
 
 **M1 — Intake and extraction with provenance.**
 Classification (§9.1), segmentation, span store, field extraction for the hero
