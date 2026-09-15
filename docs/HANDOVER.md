@@ -539,9 +539,23 @@ eligibility and a pure flat-₹/day cap. A real ombudsman award archive has
 been found for SPIKE-2 (`docs/corpus/ombudsman-feasibility.md`) with one
 sample book pulled locally, including a complete worked example of the
 hero scenario — but its reuse license is unresolved, so it has not been
-built into the annotated eval set. M0 is not yet done: the corpus and
-eval-set targets remain open, and the licensing question needs the
-project owner's input. M1 (intake/extraction) and M3 (reasoning/
+built into the annotated eval set.*
+
+*Update 2026-09-15: SPIKE-2's licensing question is now resolved, and not
+in the archive's favor. cioins.co.in's own Disclaimer and Terms &
+Conditions (checked directly this pass — they were simply not read the
+first time round, not actually absent) explicitly prohibit copying,
+redistribution, and derivative works of any site content, with no
+research/fair-use exception (`docs/corpus/ombudsman-feasibility.md`'s
+"Licensing — resolved" section has the exact clauses). This forecloses the
+best eval-data source found so far, which is a genuine setback for M0/M6,
+not a formality — the ≥15-pair corpus target and the 30-case annotated eval
+set both still need a source, and that source can no longer be this
+archive. The one locally-pulled sample file was never committed and should
+be deleted rather than kept around. M0 is not yet done: the corpus target,
+the eval-set target, and now the eval-set's *source* are all open, and the
+source question needs the project owner's input (see the feasibility memo's
+"Recommended next step"). M1 (intake/extraction) and M3 (reasoning/
 verification) work has proceeded ahead of M0's full completion regardless,
 since neither depends on SPIKE-2 or the eval set.*
 
@@ -875,7 +889,7 @@ summarised in prose by the drafter.*
 | ID | Question | Gates | Status |
 |---|---|---|---|
 | SPIKE-1 | IRDAI position on proportionate deduction, with dates | M5 | PARTIALLY RESOLVED (2026-09-14) — see `/docs/regulatory/proportionate-deduction.md` |
-| SPIKE-2 | Ombudsman corpus feasibility | M0, all evaluation | PARTIALLY RESOLVED (2026-09-14) — see `/docs/corpus/ombudsman-feasibility.md`; archive found, licensing unresolved |
+| SPIKE-2 | Ombudsman corpus feasibility | M0, all evaluation | RESOLVED — NOT CLEARED (2026-09-15) — see `/docs/corpus/ombudsman-feasibility.md`; archive found and is high-quality, but cioins.co.in's own Disclaimer and Terms & Conditions explicitly prohibit copying/redistribution/derivative works with no research-use exception. The eval set needs a different source; do not build on this archive. |
 | SPIKE-3 | Retrieval stack | M2 | RESOLVED (2026-09-14) — see `/docs/spikes/retrieval-stack.md` |
 | SPIKE-4 | Second output language and when | Post-MVP | PARTIALLY RESOLVED (2026-09-14) — see `/docs/spikes/translation-language.md`. Language (Hindi) and mechanism (translate only the final verified answer text, via Gemini — tested against Ollama and found clearly better for this role) are decided; "when" (which milestone ships it in the UI) is still open since no frontend exists yet. |
 | SPIKE-5 | Model choice per role — drafting and verification need not be the same model, and the verifier arguably should be cheaper and dumber | M3 | PARTIALLY RESOLVED (2026-09-14) — `decoder/llm/interface.py`'s `LLMClient` now has two real, working implementations (`ollama_client.py`, local, no key; `gemini_client.py`, cloud, needs `GEMINI_API_KEY`) plus two documented stubs (`anthropic_client.py`, `openai_client.py`, unwired pending keys) — any package can use any provider per role without changing its own code. Which specific model(s) to use per role (drafter vs. verifier, and which provider) is still open. |

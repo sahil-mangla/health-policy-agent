@@ -1,13 +1,15 @@
 # SPIKE-2 — Insurance Ombudsman corpus feasibility
 
-**Status: PARTIALLY RESOLVED (2026-09-14)**
+**Status: RESOLVED — NOT CLEARED FOR USE (2026-09-15)**
 
 This gates the entire evaluation plan (`docs/HANDOVER.md` §11/§12/§13). A
-real, bulk-downloadable archive has been found and spot-verified — this is
-the single most important finding of this pass — but the full 20-award
-hand-classified sample and the licensing question are not both closed yet.
-Do not build the eval harness on this archive until the open item below is
-resolved.
+real, bulk-downloadable archive was found and spot-verified (2026-09-14) —
+genuinely the best fact-pattern source identified for this project — but
+the licensing question that was left open at that point has now been
+checked directly against the source site's own published terms, and the
+answer is a clear no. **Do not use this archive as an eval-set source.**
+See "Licensing — resolved" below; everything above that heading is the
+original 2026-09-14 feasibility write-up, kept for the record.
 
 ## Where the archive actually is
 
@@ -89,20 +91,46 @@ completeness across all ~7-9 ombudsman centres and more recent years is
 **not confirmed** — a real gap to close before treating this as
 comprehensive ground truth.
 
-## Open item — blocks full sign-off
+## Licensing — resolved (2026-09-15): NOT CLEARED
 
-**No explicit reuse/licensing terms were found anywhere on cioins.co.in** —
-only a generic "© CIO. All Rights Reserved 2021" footer, no research-use,
-fair-use, or public-domain statement. Government/quasi-regulatory
-adjudication records are often treated as public record in practice, and
-these awards are already being reproduced in secondary sources (see below),
-but nothing on the source site explicitly grants reuse rights. **Do not
-bulk-scrape or redistribute this archive without resolving this** — a
-single sample file has been pulled locally for feasibility assessment only
-(`corpus/raw/ombudsman_awards/cioins_mediclaim_book17.pdf`); whether to
-commit it to this (public) repository, and whether to build the eval corpus
-on this source at scale, is a decision for the project owner, not something
-to proceed on unilaterally.
+The 2026-09-14 pass found no explicit terms and treated the question as
+open. On follow-up, cioins.co.in does in fact publish both a Disclaimer
+page and a "Terms and Conditions.pdf" (linked from the site footer,
+`/Disclaimer` and `/notification/Terms and Conditions.pdf`) — they were
+simply not checked directly the first time round. Both are unambiguous and
+neither carries a research/fair-use/non-commercial carve-out:
+
+> Disclaimer: "No material from this web site can be copied, reproduced,
+> published, uploaded, posted, transmitted or distributed or dealt with in
+> any manner." / "Users are not permitted to change, modify or prepare
+> derivative works from the content of this site."
+>
+> Terms & Conditions §L (Intellectual Property): "All content and
+> information ... available on the Website, are the property of CIO ...
+> Any unauthorized copying, distribution, modification, or use of this
+> content is expressly and strictly prohibited."
+
+This is a real, explicit prohibition, not merely an absence of a granted
+right — stronger than the 2026-09-14 memo's framing assumed. It applies to
+the mediclaim award books exactly as much as to any other page on the
+site; nothing distinguishes adjudication records as public-record content
+exempt from this. **Conclusion: this archive must not be bulk-scraped,
+committed to this (public) repository, or built into the eval set at
+scale.** The single sample file pulled 2026-09-14 for feasibility
+assessment (`corpus/raw/ombudsman_awards/cioins_mediclaim_book17.pdf`) was
+never committed and should be deleted from local disk, not retained on the
+theory it might still be useful later.
+
+SPIKE-2 is now resolved in the sense that matters for planning purposes —
+no more time should be spent extending the classification sample on this
+source, and M0/M6 should route around it rather than waiting on further
+licensing clarification. If a licensed path is wanted later, it would mean
+contacting CIO directly (`inscoun@cioins.co.in`, the T&C's own listed
+grievance contact — though that address is scoped to the ombudsman
+complaint process, not licensing requests, so a real reuse inquiry may
+need a different, more clearly commercial/legal contact than the one
+published) and getting written permission before pulling anything beyond
+this single already-deleted sample.
 
 ## Secondary source — indiankanoon.org (supplementary only)
 
@@ -119,15 +147,17 @@ established, not as a primary source on its own.
 
 ## Verdict
 
-**Usable, with real caveats.** This is a genuine, bulk-downloadable,
-clause-level adjudicated-dispute archive — far better than "nothing exists"
-— but it is unlisted (must be crawled by pattern-guessing), skews toward
-older cases from specific centres, has no stated reuse license, and needs a
-real extraction pass (not just this spot-check) to turn into the 30-case
-annotated eval set (§11's "of which ≥8 are correctly-abstain cases" still
-needs cases where the documents genuinely can't answer — worth watching for
-those specifically while extending this sample). Recommended next step:
-resolve the licensing question with the project owner, then (if cleared)
-write a small script to enumerate and pull the `Mediclaim-Book*.pdf` and
-`GroupMediclaim-Book*.pdf` series and extend this classification to a real
-20-case sample.
+**Not usable as an eval-set source — licensing forecloses it (see above).**
+The archive itself is genuinely excellent — a bulk-downloadable,
+clause-level adjudicated-dispute corpus, far better than "nothing exists"
+— which makes this a real loss for the eval plan, not a formality. The
+30-case annotated eval set (§11's "of which ≥8 are correctly-abstain
+cases") needs a different source. `indiankanoon.org` (below) was not
+itself checked for reuse terms and remains a secondary, supplementary
+option at best given its own quality/selection-bias caveats — it has not
+been vetted as a primary replacement. Recommended next step: decide the
+eval set's real source with the project owner (candidates: hand-authored
+cases grounded in the existing policy-wording/CIS corpus already in hand,
+IRDAI circulars/regulations directly, or a licensing inquiry to CIO if the
+project is willing to wait on a response) — see `docs/HANDOVER.md` M0/M6
+for how this feeds the build order.

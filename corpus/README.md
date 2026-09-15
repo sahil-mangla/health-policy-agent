@@ -68,8 +68,12 @@ Downloaded from https://www.bajajgeneralinsurance.com/health-insurance-plans/hea
 - The adversarial cases (§11): CIS contradicting wording, a term buried in
   an endorsement, etc. — none of these documents were chosen for that yet.
 - SPIKE-2's ombudsman award corpus — see
-  `docs/corpus/ombudsman-feasibility.md`. A real archive has been found and
-  one sample book pulled into `raw/ombudsman_awards/` (**not yet confirmed
-  clear to redistribute — no license found on the source site; see that
-  memo before committing more of this archive or relying on it for eval
-  data**).
+  `docs/corpus/ombudsman-feasibility.md`. A real, high-quality archive was
+  found, but its licensing has since been checked directly and resolved as
+  **not cleared for use**: cioins.co.in's own Disclaimer and Terms &
+  Conditions explicitly prohibit copying, redistribution, and derivative
+  works of site content, with no research-use exception. Do not pull more
+  of this archive or build eval data on it; the one sample file previously
+  pulled into `raw/ombudsman_awards/` was never committed here and should
+  be deleted, not reused. The eval set needs a different source — see the
+  memo's "Recommended next step".
