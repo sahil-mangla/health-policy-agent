@@ -90,7 +90,14 @@ def test_every_piece_of_evidence_carries_a_real_locatable_source(client: TestCli
 def test_unsupported_claim_produces_a_specific_question(client: TestClient) -> None:
     job = _run(client, "What co-payment applies to my claim?")
     answer = job["answer"]
-    unsupported = [c for c in answer["claims"] if c["state"] != "WELL_SUPPORTED"]
+    # NEEDS_INFORMATION claims (e.g. the room-rent panel's cap claim, which
+    # runs unconditionally alongside every question — decoder.extract.
+    # room_rent_limit) ask for their named missing input instead of quoting
+    # their own claim text (decoder.respond.question_generation), so this
+    # must target a claim whose state actually does interpolate claim text.
+    unsupported = [
+        c for c in answer["claims"] if c["state"] not in ("WELL_SUPPORTED", "NEEDS_INFORMATION")
+    ]
     assert unsupported
     assert answer["questions"]
     # The question names what was actually claimed, rather than being a

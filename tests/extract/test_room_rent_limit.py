@@ -24,6 +24,7 @@ from decoder.intake.segment import PdfSegmenter
 from decoder.schema import ExtractedField, Span, SupportState
 
 CORPUS_DIR = Path(__file__).resolve().parent.parent.parent / "corpus" / "raw" / "hdfc_ergo"
+BAJAJ_CORPUS_DIR = Path(__file__).resolve().parent.parent.parent / "corpus" / "raw" / "bajaj_allianz"
 
 
 def _field(field_name: str, value: float | None, spans: list[Span] | None = None) -> ExtractedField:
@@ -182,6 +183,12 @@ def easy_health_spans() -> list[Span]:
     return PdfSegmenter().segment("easy_health", path.read_bytes())
 
 
+@pytest.fixture(scope="module")
+def bajaj_health_guard_silver_spans() -> list[Span]:
+    path = BAJAJ_CORPUS_DIR / "health_guard_silver_pw_cis.pdf"
+    return PdfSegmenter().segment("bajaj_health_guard_silver", path.read_bytes())
+
+
 def test_real_compound_clause_end_to_end_without_sum_insured(arogya_spans: list[Span]) -> None:
     analysis = analyze_room_rent(arogya_spans, room_tariff_per_day=8000.0, sum_insured=None)
     assert analysis.eligible_limit_per_day is None
@@ -199,6 +206,37 @@ def test_real_compound_clause_end_to_end_with_sum_insured(arogya_spans: list[Spa
     assert analysis.comparison_claim.state == SupportState.WELL_SUPPORTED
     assert "exceeds" in analysis.comparison_claim.claim.predicate
     assert analysis.deduction_ratio == pytest.approx(2000.0 / 8000.0)
+
+
+def test_real_pure_percent_clause_end_to_end_with_sum_insured(
+    bajaj_health_guard_silver_spans: list[Span],
+) -> None:
+    # Bajaj Health Guard Silver (corpus/README.md): "up to 1% of Sum
+    # Insured per day ... or actual, whichever is lower" — a pure
+    # %-of-SI structure with no flat-amount component at all, the third
+    # of M5's ≥3 required real room-rent structures (compound and
+    # no-cap are already covered above).
+    analysis = analyze_room_rent(
+        bajaj_health_guard_silver_spans, room_tariff_per_day=8000.0, sum_insured=500_000
+    )
+    assert analysis.eligible_limit_per_day == 5000.0  # 1% of ₹5L
+    assert analysis.cap_claim.state == SupportState.WELL_SUPPORTED
+    assert analysis.comparison_claim is not None
+    assert analysis.comparison_claim.state == SupportState.WELL_SUPPORTED
+    assert "exceeds" in analysis.comparison_claim.claim.predicate
+    assert analysis.deduction_ratio == pytest.approx(5000.0 / 8000.0)
+
+
+def test_real_pure_percent_clause_end_to_end_without_sum_insured(
+    bajaj_health_guard_silver_spans: list[Span],
+) -> None:
+    analysis = analyze_room_rent(
+        bajaj_health_guard_silver_spans, room_tariff_per_day=8000.0, sum_insured=None
+    )
+    assert analysis.eligible_limit_per_day is None
+    assert analysis.cap_claim.state == SupportState.NEEDS_INFORMATION
+    assert SUM_INSURED_INPUT in analysis.cap_claim.claim.required_inputs
+    assert analysis.comparison_claim is None
 
 
 def test_real_no_cap_document_reports_insufficient_evidence_not_unlimited(

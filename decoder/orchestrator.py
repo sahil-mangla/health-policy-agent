@@ -167,7 +167,14 @@ class PolicyDecoder:
         span, not in anything retrieval would find for the user's
         situational question, so re-running it through entailment here
         would be both redundant and wrong). These are merged straight into
-        the answer, unmodified.
+        the answer, unmodified — and placed FIRST, ahead of the drafted
+        claims: they're grounded in code-verified arithmetic over a real
+        extraction rather than the drafter's own free-text summary of the
+        same clause, so a reader should reach them before a claim that may
+        flatten the same fact (§12/§14's headline harm case — the drafter's
+        own room-rent claim stating just the flat cap, correct number
+        appearing only afterward). This doesn't suppress the drafted claim,
+        it only fixes which one a hasty reader sees first.
         """
         report = on_progress or _ignore_progress
         provided = dict(provided_inputs or {})
@@ -204,7 +211,7 @@ class PolicyDecoder:
             resolved.append(self._resolve_claim(claim, evidence, provided, states_by_claim_id))
 
         report(Progress("resolving", "Deciding what is actually supported", total, total))
-        return assemble_answer([*resolved, *extra_resolved_claims], provided)
+        return assemble_answer([*extra_resolved_claims, *resolved], provided)
 
     def _retrieve(self, documents: Sequence[LoadedDocument], situation: str) -> list[RetrievedSpan]:
         store = InMemorySpanStore()

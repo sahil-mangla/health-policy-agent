@@ -158,7 +158,12 @@ def test_evidence_path_ends_at_the_highlighted_page_image(page) -> None:  # type
 
 def test_unsupported_claim_produces_a_question_naming_it(page) -> None:  # type: ignore[no-untyped-def]
     _analyse(page)
-    unsupported = page.locator(".claim:not(.s-WELL_SUPPORTED)")
+    # NEEDS_INFORMATION claims (e.g. the room-rent panel's cap claim, which
+    # runs unconditionally alongside every question) ask for their named
+    # missing input instead of quoting their own claim text
+    # (decoder.respond.question_generation), so this must target a claim
+    # whose state actually does interpolate claim text.
+    unsupported = page.locator(".claim:not(.s-WELL_SUPPORTED):not(.s-NEEDS_INFORMATION)")
     assert unsupported.count() > 0
     questions = page.locator("#questions li")
     assert questions.count() > 0

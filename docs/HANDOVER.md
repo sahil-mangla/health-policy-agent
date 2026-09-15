@@ -765,26 +765,40 @@ insured or ₹5,000/day, whichever is lower — ₹2,000/day at your sum
 insured", with the arithmetic panel showing ₹2,000 eligible / ₹8,000
 actual / ₹6,000 excess / 25% payable.
 
-**Known remaining rough edge, not yet fixed:** the drafter's own answer to
-a direct "what is the room rent limit" question still appears as its own
-WELL_SUPPORTED claim reporting just the flat figure — the fix ADDS the
-correct computed claim alongside it, it does not suppress or correct the
-model's simpler one. Both are visible to the reader; the correct number is
-there, but a hasty reader could still land on the wrong claim first since
-it's listed earlier. Fixing this properly means either teaching the
-drafter never to state room-rent numbers itself (unreliable prompt
-engineering) or matching/suppressing decompose's overlapping claim by
-topic (a fragile heuristic) — neither is a clean five-minute fix, so it's
-recorded here rather than papered over.
+**Rough edge, fixed 2026-09-15:** the drafter's own answer to a direct
+"what is the room rent limit" question still appeared as its own
+WELL_SUPPORTED claim reporting just the flat figure, ahead of the correct
+computed claim in reading order. Suppressing or correcting the model's
+claim was rejected at the time as needing either unreliable prompt
+engineering or a fragile topic-matching heuristic — but the actual
+complaint was purely about order, not content, and that has a real fix:
+`decoder.orchestrator.PolicyDecoder.answer()` now places
+`extra_resolved_claims` (code-verified, e.g. `decoder.extract.
+room_rent_limit`'s cap/comparison claims) FIRST, ahead of the drafted-and-
+decomposed claims, rather than appending them last. Both claims are still
+visible — nothing is suppressed — but the reader now reaches the
+code-computed number before the model's own summary of the same clause.
+Two tests (`tests/web/test_api.py::test_unsupported_claim_produces_a_specific_question`,
+`tests/web/test_ui.py::test_unsupported_claim_produces_a_question_naming_it`)
+had accidentally coupled "the first unsupported claim" to "the claim
+relevant to the asked question" and broke under the reorder; fixed by
+having them target a claim whose state actually interpolates claim text
+into its question (NEEDS_INFORMATION states, like the room-rent panel's
+own gap, ask for their named missing input instead — by design, per
+`decoder.respond.question_generation`).
 
-Two of the ≥3 required real policy structures were exercised in this pass
-(Arogya Sanjeevani: compound %-of-SI-with-flat-cap; Easy Health: no cap —
-correctly INSUFFICIENT_EVIDENCE, not "confirmed unlimited"), not yet three
-— Bajaj Health Guard Silver (pure %-of-SI, no flat component) is in the
-corpus but not yet run through this module. A pure flat-₹/day-only
-structure and the carve-out-list-absent case are still not covered at all
-(no such document in the starter corpus yet — corpus/README.md's own gap
-list). The DoD is not yet met.*
+*Update 2026-09-15: all 3 of the ≥3 required real policy structures are now
+exercised (Arogya Sanjeevani: compound %-of-SI-with-flat-cap; Easy Health:
+no cap — correctly INSUFFICIENT_EVIDENCE, not "confirmed unlimited"; Bajaj
+Health Guard Silver: pure %-of-SI, no flat component — "up to 1% of Sum
+Insured per day ... or actual, whichever is lower", verified end to end
+with and without a supplied sum insured in
+`tests/extract/test_room_rent_limit.py`). A pure flat-₹/day-only structure
+and the carve-out-list-absent case are still not covered at all (no such
+document in the starter corpus yet — corpus/README.md's own gap list), but
+those are not part of the ≥3-structures DoD clause. The DoD's "runs on ≥3
+real policies with different room-rent structures, including one with no
+cap" is now met.*
 
 *Two real defects were caught by running this rather than by reasoning
 about it, both now fixed. (1) Numeric `DOCUMENT_FACT` claims were being
