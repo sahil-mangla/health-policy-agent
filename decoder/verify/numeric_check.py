@@ -141,9 +141,19 @@ def entailment_result_for_derived_claim(claim: AtomicClaim) -> EntailmentResult:
     deliberate, documented convention, not a document Span standing in for
     something it isn't.
     """
-    assert claim.derived_operation is not None  # verify_derived_claim already checks this
-    operation_text = render_operation_text(claim.derived_operation)
+    # Checked (and, if unset, raises MissingDerivedOperationError) BEFORE
+    # touching claim.derived_operation below — verify_derived_claim is the
+    # single source of truth for this validation; re-asserting it here
+    # first would only shadow that documented exception with a bare
+    # AssertionError (a real bug, caught 2026-09-15 by
+    # decoder.eval actually driving a live model against real documents:
+    # decompose can legitimately classify a drafted claim DERIVED without
+    # being able to extract real operands from free text — its own
+    # module docstring says so — and this function crashed instead of
+    # letting the caller handle the documented exception).
     verdict = verify_derived_claim(claim)
+    assert claim.derived_operation is not None  # verify_derived_claim guarantees this now
+    operation_text = render_operation_text(claim.derived_operation)
     synthetic_span = Span(
         id=f"{claim.id}:computed",
         doc_id="__computed__",

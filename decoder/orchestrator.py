@@ -51,6 +51,7 @@ from decoder.verify.continuity_requirement import attach_continuity_requirement
 from decoder.verify.decompose import OllamaDecomposer
 from decoder.verify.entailment import OllamaEntailer
 from decoder.verify.numeric_check import (
+    MissingDerivedOperationError,
     entailment_result_for_derived_claim,
     numeric_value_appears_verbatim,
 )
@@ -272,7 +273,20 @@ class PolicyDecoder:
     ) -> list[EntailmentResult]:
         if claim.claim_class == ClaimClass.DERIVED:
             # Executed in code, never asked of a model (§7.2).
-            return [entailment_result_for_derived_claim(claim)]
+            try:
+                return [entailment_result_for_derived_claim(claim)]
+            except MissingDerivedOperationError:
+                # decompose can legitimately classify a drafted claim
+                # DERIVED without being able to extract real operands from
+                # free text (decoder.verify.decompose's own documented
+                # limitation — it deliberately doesn't attempt this).
+                # Code has no way to verify an arithmetic claim it was
+                # never given real numbers for, so this resolves to
+                # INSUFFICIENT_EVIDENCE like any other unverifiable claim
+                # (empty verdicts -> resolve()'s "not supports" branch) —
+                # never a crash of the whole answer (§8: every state
+                # produces an answer, nothing is a refusal).
+                return []
         # Every claim against every retrieved span, not just the one the
         # drafter cited: "Contradictions are found by looking, not by
         # hoping" (§7.2).

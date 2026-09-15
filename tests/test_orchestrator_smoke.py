@@ -46,6 +46,10 @@ def test_package_imports_cleanly() -> None:
 
 def test_all_subpackages_import_cleanly() -> None:
     import decoder.eval  # noqa: F401
+    import decoder.eval.cases  # noqa: F401
+    import decoder.eval.corpus_docs  # noqa: F401
+    import decoder.eval.runner  # noqa: F401
+    import decoder.eval.schema  # noqa: F401
     import decoder.extract.interfaces  # noqa: F401
     import decoder.extract.llm_extractor  # noqa: F401
     import decoder.intake.interfaces  # noqa: F401
@@ -77,13 +81,18 @@ class _ScriptedLLMClient(LLMClient):
     deterministically without a live model."""
 
     def __init__(
-        self, entailment_response: str = "VERDICT: SUPPORTS\nQUOTE: Co-payment of 5%"
+        self,
+        entailment_response: str = "VERDICT: SUPPORTS\nQUOTE: Co-payment of 5%",
+        decompose_response: str = (
+            "CLAIM: the policy | applies a co-payment of | 5% | DOCUMENT_FACT"
+        ),
     ) -> None:
         self.entailment_response = entailment_response
+        self.decompose_response = decompose_response
 
     def generate(self, prompt: str, system: str, model: str) -> str:
         if "split a draft answer" in system:
-            return "CLAIM: the policy | applies a co-payment of | 5% | DOCUMENT_FACT"
+            return self.decompose_response
         if "strict fact-checker" in system:
             return self.entailment_response
         return _DRAFT_TEXT
@@ -111,6 +120,25 @@ def test_pipeline_produces_a_resolved_answer() -> None:
     assert answer.overall_state == SupportState.WELL_SUPPORTED
     assert len(answer.claims) == 1
     assert answer.claims[0].verdicts, "a claim reached the answer without any verdict"
+
+
+def test_a_derived_claim_without_operands_abstains_rather_than_crashing() -> None:
+    # Regression, found 2026-09-15 by decoder.eval actually driving a live
+    # model against real documents: decoder.verify.decompose's own
+    # docstring documents that it can legitimately classify a drafted claim
+    # DERIVED without being able to extract real operands from free text —
+    # but decoder.orchestrator.PolicyDecoder._verdicts_for had no handling
+    # for that documented case, so the whole answer() call crashed with an
+    # AssertionError instead of resolving that one claim to
+    # INSUFFICIENT_EVIDENCE (§8: every state produces an answer, never a
+    # crash).
+    llm = _ScriptedLLMClient(
+        decompose_response="CLAIM: the room tariff | exceeds the eligible limit | True | DERIVED"
+    )
+    answer = _decoder(llm).answer([_document()], "does my room tariff exceed the limit?")
+    assert answer.overall_state == SupportState.INSUFFICIENT_EVIDENCE
+    assert len(answer.claims) == 1
+    assert answer.claims[0].verdicts == []
 
 
 def test_no_answer_path_bypasses_verification() -> None:

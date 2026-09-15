@@ -75,6 +75,30 @@ def test_missing_derived_operation_raises() -> None:
         verify_derived_claim(claim)
 
 
+def test_entailment_result_for_derived_claim_raises_not_asserts_when_operation_missing() -> None:
+    # Regression: entailment_result_for_derived_claim used to carry its own
+    # premature `assert claim.derived_operation is not None` ahead of
+    # calling verify_derived_claim, which shadowed the documented
+    # MissingDerivedOperationError with a bare, undocumented
+    # AssertionError — found 2026-09-15 by decoder.eval actually driving a
+    # live model against real documents (decompose can legitimately
+    # classify a drafted claim DERIVED without extractable operands from
+    # free text, per its own module docstring), which crashed
+    # decoder.orchestrator.PolicyDecoder.answer() entirely instead of
+    # reaching the caller's exception handler.
+    claim = AtomicClaim(
+        id="c1",
+        subject="x",
+        predicate="y",
+        value=True,
+        claim_class=ClaimClass.DERIVED,
+        is_numeric=True,
+        verbatim_match=False,
+    )
+    with pytest.raises(MissingDerivedOperationError):
+        entailment_result_for_derived_claim(claim)
+
+
 def test_non_bool_value_raises() -> None:
     claim = AtomicClaim(
         id="c1",
