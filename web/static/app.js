@@ -453,18 +453,20 @@ function addChatBubble(log, kind, text, isError) {
    clause text — show the original and the translation together." The
    English original (claim.text, in the always-visible claim head) is
    never replaced, only supplemented. */
+const HINDI_TOGGLE_LABEL = "Translate to Hindi · हिंदी में देखें";
+
 function renderHindiToggle(claim) {
   const wrap = document.createElement("div");
   const button = document.createElement("button");
   button.type = "button";
   button.className = "hindi-toggle";
-  button.textContent = "हिंदी में देखें";
+  button.textContent = HINDI_TOGGLE_LABEL;
 
   let block = null;
   button.addEventListener("click", async () => {
     if (block) {
       block.hidden = !block.hidden;
-      button.textContent = block.hidden ? "हिंदी में देखें" : "Hide Hindi";
+      button.textContent = block.hidden ? HINDI_TOGGLE_LABEL : "Hide Hindi translation";
       return;
     }
     button.disabled = true;
@@ -480,7 +482,7 @@ function renderHindiToggle(claim) {
       translated.textContent = res.translation;
       block.append(label, translated);
       wrap.appendChild(block);
-      button.textContent = "Hide Hindi";
+      button.textContent = "Hide Hindi translation";
     } catch (err) {
       button.textContent = `Hindi unavailable (${err.message || err})`;
     } finally {
