@@ -13,6 +13,11 @@ is in production: nothing in decoder/ knows this exists.
 
 from __future__ import annotations
 
+import hashlib
+
+import numpy as np
+from numpy.typing import NDArray
+
 from decoder.llm.interface import LLMClient
 
 DRAFT = "The policy applies a co-payment of 5% to every admissible claim."
@@ -46,3 +51,28 @@ class ScriptedLLMClient(LLMClient):
         if "co-payment" in claim_line.lower() and GROUNDED_QUOTE in passage:
             return f"VERDICT: SUPPORTS\nQUOTE: {GROUNDED_QUOTE}"
         return "VERDICT: NEUTRAL\nQUOTE: NONE"
+
+
+class FakeEmbeddingModel:
+    """Deterministic, hash-seeded stand-in for the real SentenceTransformer
+    (decoder.retrieve.dense) — exercises the real DenseIndex/HybridRetriever
+    code path (so web tests drive genuinely hybrid retrieval, not silently
+    lexical-only) without downloading or running an actual transformer in
+    every test run, for the same reason ScriptedLLMClient stands in for a
+    real LLM above."""
+
+    _DIM = 16
+
+    def encode(
+        self, texts: list[str], normalize_embeddings: bool = True
+    ) -> NDArray[np.float32]:
+        vectors = np.array([self._vector(text) for text in texts], dtype=np.float32)
+        if normalize_embeddings:
+            norms = np.linalg.norm(vectors, axis=1, keepdims=True)
+            norms[norms == 0] = 1.0
+            vectors = vectors / norms
+        return vectors
+
+    def _vector(self, text: str) -> NDArray[np.float32]:
+        seed = int(hashlib.sha256(text.encode()).hexdigest(), 16) % (2**32)
+        return np.random.default_rng(seed).standard_normal(self._DIM).astype(np.float32)

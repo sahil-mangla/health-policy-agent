@@ -9,14 +9,12 @@ dependencies = [
     "google-genai>=1.0",
     "fastapi>=0.141.1",
     "uvicorn[standard]>=0.53.0",
-]
-
-[project.optional-dependencies]
-# Deferred: no embedding calls happen yet (dense retrieval is blocked on the
-# SPIKE-2 corpus). Kept out of the default install so `uv sync` stays fast —
-# sentence-transformers pulls in torch. Install with `uv sync --extra dense`
-# once decoder/retrieve/dense.py is implemented for real.
-dense = [
+    # Dense retrieval (decoder/retrieve/dense.py) is no longer optional —
+    # docs/HANDOVER.md §10 requires hybrid retrieval for every answer, and
+    # decoder.orchestrator.PolicyDecoder now retrieves through
+    # decoder.retrieve.hybrid.HybridRetriever unconditionally. Was deferred
+    # as an extra while the SPIKE-2 corpus was empty (see git history);
+    # promoted to a real dependency once there was a real corpus to embed.
     "sentence-transformers>=3.0",
     "numpy>=1.26",
 ]
@@ -40,7 +38,17 @@ extend-exclude = ["docs"]
 select = ["E", "F", "I", "UP", "B", "SIM"]
 
 [tool.mypy]
-python_version = "3.11"
+# Mypy-only setting — does NOT change requires-python above (still >=3.11).
+# numpy>=2.1's own .pyi stubs use PEP 695 `type X = ...` syntax
+# unconditionally (confirmed 2026-09-15, and a known, widespread ecosystem
+# issue: github.com/python/mypy/issues/18701, /issues/21178 — mypy ties
+# stub-syntax validity to `python_version` even for third-party stubs it
+# doesn't control). numpy became a required dependency once dense
+# retrieval (decoder/retrieve/dense.py) went from stub to real, so this now
+# has to actually resolve rather than staying latent. Real Python-version
+# compatibility is still enforced by what the test suite actually runs on
+# (3.11+), not by this setting.
+python_version = "3.12"
 strict = true
 plugins = ["pydantic.mypy"]
 

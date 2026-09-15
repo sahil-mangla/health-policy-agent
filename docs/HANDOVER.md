@@ -672,6 +672,27 @@ a CONFLICTING state. This shows up as a recall ceiling, not as a wrong
 answer, and it is invisible without the eval set — worth stating plainly
 rather than discovering during evaluation.*
 
+*Update, same day (later pass): the dense half is now real, closing the
+gap noted above. `decoder/retrieve/dense.py`'s `DenseIndex` uses
+`BAAI/bge-small-en-v1.5` (384-dim, sentence-transformers, brute-force numpy
+cosine similarity — the SPIKE-3 plan, now unblocked by the real 5-pair
+corpus). `decoder/retrieve/hybrid.py`'s `HybridRetriever` unions it with
+the lexical half via `reciprocal_rank_fusion`, and
+`decoder.orchestrator.PolicyDecoder` retrieves through the hybrid
+retriever unconditionally for every `answer()` call — `sentence-
+transformers`/`numpy` moved from an optional extra to real dependencies in
+`pyproject.toml`. Verified two ways: `tests/test_orchestrator_live.py`'s 5
+tests all pass against the real embedding model and a live local LLM
+end-to-end, and `tests/retrieve/test_hybrid.py` specifically proves the
+actual point of hybrid retrieval — a span found by only one of the two
+methods (a paraphrase dense would catch that lexical can't, or an exact
+number lexical would catch that dense might miss) still survives fusion
+rather than being dropped. §10's hybrid-retrieval requirement is now met
+structurally; recall@k/contradiction-recall metrics still need the eval
+set (§11/§15, currently blocked — see SPIKE-2's 2026-09-15 resolution:
+the planned ombudsman-archive eval source turned out not to be licensed
+for this use, so a replacement source is still an open decision).*
+
 **M3 — Reasoning and verification.** *(The core.)*
 Draft generation, atomic decomposition, isolated span entailment with the
 deciding-words trap, code-executed derived claims.

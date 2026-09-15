@@ -1,7 +1,8 @@
-"""Retriever interface. decoder.retrieve.lexical_fts5.FTS5LexicalIndex
-already satisfies the shape of this; decoder.retrieve.dense will once it's
-real. A HybridRetriever combining both via
-decoder.retrieve.fusion.reciprocal_rank_fusion is the next milestone's job.
+"""Retriever interface. decoder.retrieve.lexical_fts5.FTS5LexicalIndex and
+decoder.retrieve.dense.DenseIndex both satisfy the shape of this;
+decoder.retrieve.hybrid.HybridRetriever combines them via
+decoder.retrieve.fusion.reciprocal_rank_fusion and is what
+decoder.orchestrator.PolicyDecoder actually retrieves through.
 """
 
 from __future__ import annotations

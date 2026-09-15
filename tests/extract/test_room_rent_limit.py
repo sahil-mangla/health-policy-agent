@@ -23,8 +23,9 @@ from decoder.extract.room_rent_limit import (
 from decoder.intake.segment import PdfSegmenter
 from decoder.schema import ExtractedField, Span, SupportState
 
-CORPUS_DIR = Path(__file__).resolve().parent.parent.parent / "corpus" / "raw" / "hdfc_ergo"
-BAJAJ_CORPUS_DIR = Path(__file__).resolve().parent.parent.parent / "corpus" / "raw" / "bajaj_allianz"
+_CORPUS_RAW = Path(__file__).resolve().parent.parent.parent / "corpus" / "raw"
+CORPUS_DIR = _CORPUS_RAW / "hdfc_ergo"
+BAJAJ_CORPUS_DIR = _CORPUS_RAW / "bajaj_allianz"
 
 
 def _field(field_name: str, value: float | None, spans: list[Span] | None = None) -> ExtractedField:

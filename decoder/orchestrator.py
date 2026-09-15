@@ -12,13 +12,11 @@ resolution are not optional stops on the way to a response, they are the
 only door in. The drafter's prose is used solely as decomposition input and
 never reaches the returned Answer.
 
-Retrieval here is lexical-only (decoder.retrieve.lexical_fts5). Dense
-retrieval is still a stub blocked on corpus size, and §10 requires hybrid
-retrieval — so this pipeline currently under-retrieves relative to the
-spec, which shows up as a recall gap (a contradicting span that only dense
-retrieval would have found is never entailed against), not as a wrong
-answer. Wire decoder.retrieve.dense + fusion.reciprocal_rank_fusion in here
-when M2 lands; nothing else in this module changes.
+Retrieval is hybrid (decoder.retrieve.hybrid.HybridRetriever): lexical
+FTS5 (decoder.retrieve.lexical_fts5) and dense embedding similarity
+(decoder.retrieve.dense) unioned via Reciprocal Rank Fusion
+(decoder.retrieve.fusion), per §10 and docs/spikes/retrieval-stack.md
+(SPIKE-3). Neither retrieval method's own logic lives in this module.
 """
 
 from __future__ import annotations
@@ -35,6 +33,8 @@ from decoder.reason.ollama_drafter import OllamaDrafter
 from decoder.resolve.rules import resolve
 from decoder.respond.answer_assembly import assemble_answer
 from decoder.respond.labels import UNUSABLE_DOCUMENT_MESSAGES
+from decoder.retrieve.dense import DenseIndex, EmbeddingModel, load_default_model
+from decoder.retrieve.hybrid import HybridRetriever
 from decoder.retrieve.interfaces import RetrievedSpan
 from decoder.retrieve.lexical_fts5 import FTS5LexicalIndex
 from decoder.schema import (
@@ -138,11 +138,18 @@ class PolicyDecoder:
         llm: LLMClient,
         model: str = "qwen2.5-coder:7b",
         top_k: int = 8,
+        embedding_model: EmbeddingModel | None = None,
     ) -> None:
         self._drafter = OllamaDrafter(llm, model=model)
         self._decomposer = OllamaDecomposer(llm, model=model)
         self._entailer = OllamaEntailer(llm, model=model)
         self._top_k = top_k
+        # Loaded once and reused across every answer() call — the model
+        # weights are the expensive part (SentenceTransformer construction),
+        # not the small per-call index built from them in _retrieve().
+        # `embedding_model` is injectable so tests don't need to load the
+        # real ~130MB transformer (mirrors how `llm` itself is injectable).
+        self._embedding_model = embedding_model or load_default_model()
 
     def answer(
         self,
@@ -215,12 +222,20 @@ class PolicyDecoder:
 
     def _retrieve(self, documents: Sequence[LoadedDocument], situation: str) -> list[RetrievedSpan]:
         store = InMemorySpanStore()
-        with FTS5LexicalIndex() as index:
-            for document in documents:
-                for span in document.spans:
-                    store.add(span)
-                    index.add_span(span)
-            hits = index.search(situation, top_k=self._top_k)
+        # Rebuilt fresh per call — cheap for the lexical half (a small
+        # SQLite table) and, for the dense half, only re-embeds this call's
+        # spans, not the model weights themselves (those are loaded once in
+        # __init__ and reused via self._embedding_model).
+        with FTS5LexicalIndex() as lexical_index:
+            retriever = HybridRetriever(lexical_index, DenseIndex(self._embedding_model))
+            all_spans = [span for document in documents for span in document.spans]
+            for span in all_spans:
+                store.add(span)
+            # One batched add_spans() call, not one add_span() per span —
+            # the dense half's whole reason for batching (one encode() call
+            # for every span) only pays off if callers actually batch.
+            retriever.add_spans(all_spans)
+            hits = retriever.search(situation, top_k=self._top_k)
 
         evidence: list[RetrievedSpan] = []
         for span_id, score in hits:

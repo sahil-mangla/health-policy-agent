@@ -1,6 +1,6 @@
 # SPIKE-3 — Retrieval stack
 
-**Status: RESOLVED (2026-09-14)**
+**Status: RESOLVED (2026-09-14); dense half implemented for real (2026-09-15)**
 
 Constraints from `docs/HANDOVER.md` §10: must run locally for eval
 reproducibility, must support exact-phrase lookup, half-day timebox, retrieval
@@ -67,13 +67,22 @@ behind the same `Retriever` interface (`decoder/retrieve/interfaces.py`).
   original exact-phrase behavior, kept for verbatim-citation lookup). The
   "must support exact-phrase lookup" requirement is satisfied by
   `search_phrase()`; it was never meant to be the default retrieval mode.
-- The dense path (`decoder/retrieve/dense.py`) stays a stub: it needs an
-  actual embedding model download and a real corpus to be meaningfully
-  tested, and the corpus is blocked on SPIKE-2 (still not started — see
-  `docs/HANDOVER.md` §11/§15). Implementing it against zero documents would
-  produce no signal, so it's left as `NotImplementedError` with a clear TODO
-  rather than built to look done.
-- RRF fusion (`decoder/retrieve/fusion.py`) is pure and dependency-free, so it
-  is also implemented for real now even though nothing calls it end-to-end
-  yet — a `HybridRetriever` wiring both `lexical_fts5` and `dense` together is
-  the next milestone's job, once `dense.py` is real.
+- **Update (2026-09-15):** the dense path is now real.
+  `decoder/retrieve/dense.py`'s `DenseIndex` uses `BAAI/bge-small-en-v1.5`
+  (384-dim, sentence-transformers, brute-force numpy cosine similarity —
+  exactly as planned above) with the query/passage instruction asymmetry
+  BGE's own model card specifies (queries get a fixed search instruction
+  prefix, passages get none; verified directly against the model card
+  rather than assumed). `decoder/retrieve/hybrid.py`'s `HybridRetriever`
+  wires it together with `FTS5LexicalIndex` via `reciprocal_rank_fusion`,
+  and `decoder.orchestrator.PolicyDecoder` retrieves through it
+  unconditionally — `sentence-transformers`/`numpy` moved from the
+  `dense` optional extra to real dependencies in `pyproject.toml`
+  accordingly. Verified live end-to-end (`tests/test_orchestrator_live.py`,
+  real Ollama + real embedding model, all 5 tests passing) and by dedicated
+  unit tests against hand-crafted fake embedding models
+  (`tests/retrieve/test_dense.py`, `tests/retrieve/test_hybrid.py`) that
+  specifically prove a span found by only one retrieval method still
+  survives fusion — the actual point of doing this hybrid at all.
+- RRF fusion (`decoder/retrieve/fusion.py`) is pure and dependency-free, and
+  is now load-bearing rather than merely implemented-but-unused.

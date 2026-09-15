@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+import hashlib
+
+import numpy as np
 import pytest
 
 import decoder
@@ -13,6 +16,28 @@ from decoder.orchestrator import (
     load_document,
 )
 from decoder.schema import Span, SupportState
+
+
+class _FakeEmbeddingModel:
+    """Deterministic, hash-seeded stand-in for the real SentenceTransformer
+    — exercises the real DenseIndex/HybridRetriever code path (so retrieval
+    is genuinely hybrid, not silently lexical-only in these tests) without
+    downloading or running an actual transformer, matching how
+    _ScriptedLLMClient below stands in for a real LLM."""
+
+    _DIM = 16
+
+    def encode(self, texts: list[str], normalize_embeddings: bool = True) -> np.ndarray:
+        vectors = np.array([self._vector(text) for text in texts], dtype=np.float32)
+        if normalize_embeddings:
+            norms = np.linalg.norm(vectors, axis=1, keepdims=True)
+            norms[norms == 0] = 1.0
+            vectors = vectors / norms
+        return vectors
+
+    def _vector(self, text: str) -> np.ndarray:
+        seed = int(hashlib.sha256(text.encode()).hexdigest(), 16) % (2**32)
+        return np.random.default_rng(seed).standard_normal(self._DIM)
 
 
 def test_package_imports_cleanly() -> None:
@@ -34,6 +59,7 @@ def test_all_subpackages_import_cleanly() -> None:
     import decoder.respond.question_generation  # noqa: F401
     import decoder.retrieve.dense  # noqa: F401
     import decoder.retrieve.fusion  # noqa: F401
+    import decoder.retrieve.hybrid  # noqa: F401
     import decoder.retrieve.interfaces  # noqa: F401
     import decoder.retrieve.lexical_fts5  # noqa: F401
     import decoder.verify.decompose  # noqa: F401
@@ -74,8 +100,14 @@ def _document() -> LoadedDocument:
     )
 
 
+def _decoder(llm: LLMClient) -> PolicyDecoder:
+    # embedding_model injected so this fast/deterministic suite never loads
+    # the real transformer — see _FakeEmbeddingModel's own docstring.
+    return PolicyDecoder(llm, embedding_model=_FakeEmbeddingModel())
+
+
 def test_pipeline_produces_a_resolved_answer() -> None:
-    answer = PolicyDecoder(_ScriptedLLMClient()).answer([_document()], "what co-payment applies?")
+    answer = _decoder(_ScriptedLLMClient()).answer([_document()], "what co-payment applies?")
     assert answer.overall_state == SupportState.WELL_SUPPORTED
     assert len(answer.claims) == 1
     assert answer.claims[0].verdicts, "a claim reached the answer without any verdict"
@@ -87,7 +119,7 @@ def test_no_answer_path_bypasses_verification() -> None:
     # piece of model output that never passed verification, so the check
     # that matters is that its prose cannot reach the reader: the answer
     # text must be rebuilt from resolved claims, not carried through.
-    answer = PolicyDecoder(_ScriptedLLMClient()).answer([_document()], "what co-payment applies?")
+    answer = _decoder(_ScriptedLLMClient()).answer([_document()], "what co-payment applies?")
     assert answer.text is not None
     assert _DRAFT_TEXT not in answer.text
     assert all(resolved.verdicts for resolved in answer.claims)
@@ -98,7 +130,7 @@ def test_unverifiable_claim_is_never_well_supported() -> None:
     # claim must come back INSUFFICIENT_EVIDENCE — a claim that could not
     # be grounded must not inherit a supported state from anywhere else.
     llm = _ScriptedLLMClient(entailment_response="VERDICT: NEUTRAL\nQUOTE: NONE")
-    answer = PolicyDecoder(llm).answer([_document()], "what co-payment applies?")
+    answer = _decoder(llm).answer([_document()], "what co-payment applies?")
     assert answer.overall_state == SupportState.INSUFFICIENT_EVIDENCE
 
 
@@ -111,7 +143,7 @@ def test_fabricated_quote_cannot_support_a_claim() -> None:
     llm = _ScriptedLLMClient(
         entailment_response="VERDICT: SUPPORTS\nQUOTE: a co-payment of 40% applies"
     )
-    answer = PolicyDecoder(llm).answer([_document()], "what co-payment applies?")
+    answer = _decoder(llm).answer([_document()], "what co-payment applies?")
     assert answer.overall_state == SupportState.INSUFFICIENT_EVIDENCE
 
 

@@ -42,6 +42,7 @@ from decoder.orchestrator import LoadedDocument, PolicyDecoder, Progress, Unusab
 from decoder.respond.answer_assembly import render_claim_statement
 from decoder.respond.labels import SUPPORT_STATE_LABELS
 from decoder.respond.question_generation import generate_follow_up_questions
+from decoder.retrieve.dense import EmbeddingModel
 from decoder.schema import Answer, EntailmentVerdict
 from web import corpus_library
 from web.page_image import PageImageError, render_page_with_span
@@ -150,6 +151,27 @@ def _llm_client() -> LLMClient:
 
         return ScriptedLLMClient()
     return OllamaLLMClient()
+
+
+_embedding_model_cache: EmbeddingModel | None = None
+
+
+def _embedding_model() -> EmbeddingModel:
+    """Cached at process scope, unlike `_llm_client()` — an LLMClient is
+    cheap to construct (it connects lazily), but the real embedding model
+    means loading an actual transformer, which every job would otherwise
+    pay for again."""
+    global _embedding_model_cache
+    if _embedding_model_cache is None:
+        if os.environ.get(FAKE_LLM_ENV_VAR):
+            from web.fake_llm import FakeEmbeddingModel
+
+            _embedding_model_cache = FakeEmbeddingModel()
+        else:
+            from decoder.retrieve.dense import load_default_model
+
+            _embedding_model_cache = load_default_model()
+    return _embedding_model_cache
 
 
 def create_app() -> FastAPI:
@@ -280,7 +302,7 @@ def _run_analysis(
         if room_rent.comparison_claim is not None:
             extra_resolved.append(room_rent.comparison_claim)
 
-        decoder = PolicyDecoder(_llm_client(), top_k=_top_k())
+        decoder = PolicyDecoder(_llm_client(), top_k=_top_k(), embedding_model=_embedding_model())
         answer = decoder.answer(
             [document], situation, extra_resolved_claims=extra_resolved, on_progress=report
         )
