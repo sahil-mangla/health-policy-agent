@@ -1,17 +1,25 @@
-"""DERIVED claim verification — docs/HANDOVER.md §7.2.
+"""The numeric checks §7.2 assigns to code rather than a model — both rows
+of docs/HANDOVER.md §7.2's table that say "code, not model":
 
-"DERIVED [claims are] executed in code. The inputs must themselves be
-verified claims." Pure arithmetic, no model call — and deliberately no
-attempt to extract the operation from a model's free-text draft (see
-decoder.schema.DerivedOperation's docstring for why that was tried and
-rejected). A DERIVED AtomicClaim must carry a populated `derived_operation`
-before this can verify it; that field is set by whatever code already has
-the operand values on hand (e.g. a user-supplied room tariff compared
-against an already-extracted numeric field), not by decompose.
+- `DERIVED`: "executed in code. The inputs must themselves be verified
+  claims." Pure arithmetic, and deliberately no attempt to extract the
+  operation from a model's free-text draft (see
+  decoder.schema.DerivedOperation's docstring for why that was tried and
+  rejected). A DERIVED AtomicClaim must carry a populated
+  `derived_operation` before this can verify it; that field is set by
+  whatever code already has the operand values on hand (e.g. a
+  user-supplied room tariff compared against an already-extracted numeric
+  field), not by decompose.
+- `DOCUMENT_FACT`, numeric: "Exact string match of the value in the span."
+  See numeric_value_appears_verbatim() — this is what decides a numeric
+  claim's `verbatim_match`, which §6/§8 then use to force the
+  NEEDS_CONFIRMATION downgrade when the figure cannot be found literally
+  in the cited text.
 """
 
 from __future__ import annotations
 
+import re
 from collections.abc import Callable
 
 from decoder.schema import AtomicClaim, DerivedOperation, EntailmentResult, EntailmentVerdict, Span
@@ -23,6 +31,45 @@ _OPERATORS: dict[str, Callable[[float, float], bool]] = {
     "LESS_OR_EQUAL": lambda left, right: left <= right,
     "EQUAL": lambda left, right: left == right,
 }
+
+
+_NUMBER_RE = re.compile(r"\d[\d,]*(?:\.\d+)?")
+
+
+def numeric_value_appears_verbatim(claim_value: str, span_text: str) -> bool:
+    """§7.2's `DOCUMENT_FACT`, numeric row: "Exact string match of the value
+    in the span. Code, not model."
+
+    Every number in `claim_value` must appear literally in `span_text`,
+    bounded so a bare "5" does not match inside "1500" or "35" — a loose
+    substring hit here would wrongly mark a claim verbatim and let §8
+    promote it to WELL_SUPPORTED, which is the one direction of error this
+    system cannot afford (§12's confident-and-wrong case).
+
+    Deliberately strict about formatting: "5,000" does not match "5000".
+    That fails safe — the claim is merely downgraded to NEEDS_CONFIRMATION
+    (§6), which is the honest outcome when the figure as stated cannot be
+    found as stated.
+
+    Returns False for a value containing no number at all: a non-numeric
+    value has nothing for this check to match, and claiming otherwise
+    would assert a verification that never happened.
+    """
+    numbers = _NUMBER_RE.findall(claim_value)
+    if not numbers:
+        return False
+    return all(_number_appears(number, span_text) for number in numbers)
+
+
+def _number_appears(number: str, span_text: str) -> bool:
+    # The two lookbehinds reject a match that is part of a LARGER number —
+    # "5" inside "1500", or "5000" inside "1.5000" / "12,500" — while still
+    # matching "Rs.5000/-", where the "." is an abbreviation point rather
+    # than a decimal separator. Distinguishing those two needs the check to
+    # look past the punctuation at whether a digit precedes it; a simpler
+    # `(?<![\d.,])` rejects "Rs.5000" too, which is how Indian policy
+    # wording almost always states an amount.
+    return bool(re.search(rf"(?<!\d)(?<!\d[.,]){re.escape(number)}(?!\d)", span_text))
 
 
 class MissingDerivedOperationError(ValueError):
