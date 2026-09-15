@@ -272,3 +272,21 @@ def test_hindi_toggle_shows_translation_alongside_the_original_not_instead_of_it
     claim.locator(".hindi-toggle").click()
     page.wait_for_selector(".hindi-block", timeout=10_000)
     assert claim.locator(".claim-text").inner_text().strip() == original
+
+
+def test_translate_everything_toggle_translates_the_whole_page_at_once(page) -> None:  # type: ignore[no-untyped-def]
+    # A per-claim button alone means clicking once per claim/question for a
+    # full analysis — the page-level toggle in the Overall panel runs every
+    # already-registered translator (overall summary, every claim, every
+    # question) in one action instead.
+    _analyse(page)
+    expected = page.locator(".claim").count() + page.locator("#questions li").count() + 1
+    assert f"({expected} items)" in page.locator("#translate-all").inner_text()
+
+    page.click("#translate-all")
+    page.wait_for_function(
+        "n => document.querySelectorAll('.hindi-block').length >= n",
+        arg=expected,
+        timeout=15_000,
+    )
+    assert page.locator("#overall-hindi .hindi-block").count() == 1

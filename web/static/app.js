@@ -44,6 +44,11 @@ let documents = [];
 // the missing-inputs form across re-checks of the SAME situation; reset
 // whenever a fresh "Analyse" click starts a genuinely new question.
 let extraProvidedInputs = {};
+// Every per-piece translator created while rendering the current answer
+// (overall summary, each claim, each question) — the global "Translate
+// everything" toggle just runs all of them, rather than duplicating the
+// translation logic itself. Reset on every fresh render().
+let translateAllTargets = [];
 
 async function init() {
   const res = await fetch("/api/documents");
@@ -87,6 +92,7 @@ async function init() {
   });
 
   setupUpload();
+  setupTranslateAll();
 
   const heroInputs = await fetch("/api/room-rent-inputs").then((r) => r.json());
   el("room-tariff-note").textContent = heroInputs.room_tariff_per_day.description;
@@ -218,12 +224,20 @@ function showError(message) {
 
 function render(answer) {
   el("results").hidden = false;
+  translateAllTargets = [];
 
   const chip = el("overall-chip");
   chip.textContent = answer.overall_label;
   chip.className = `state-chip state-${answer.overall_state}`;
   chip.dataset.state = answer.overall_state;
-  el("overall-explainer").textContent = STATE_MEANING[answer.overall_state] || "";
+  const overallExplanation = STATE_MEANING[answer.overall_state] || "";
+  el("overall-explainer").textContent = overallExplanation;
+
+  const overallHindi = el("overall-hindi");
+  overallHindi.innerHTML = "";
+  const overallTranslator = createTranslator(() => overallExplanation, { showButton: false });
+  overallHindi.appendChild(overallTranslator.element);
+  translateAllTargets.push(overallTranslator.translate);
 
   renderArithmetic(answer.room_rent_calculation);
 
@@ -238,12 +252,18 @@ function render(answer) {
   questions.innerHTML = "";
   for (const question of answer.questions) {
     const li = document.createElement("li");
-    li.textContent = question;
+    const text = document.createElement("span");
+    text.textContent = question;
+    li.appendChild(text);
+    const questionTranslator = createTranslator(() => question);
+    li.appendChild(questionTranslator.element);
+    translateAllTargets.push(questionTranslator.translate);
     questions.appendChild(li);
   }
   el("questions-panel").hidden = answer.questions.length === 0;
 
   renderMissingInputs(answer.missing_inputs);
+  updateTranslateAllLabel();
 }
 
 function inputTypeFor(valueType) {
@@ -450,28 +470,47 @@ function addChatBubble(log, kind, text, isError) {
 }
 
 /* Hindi: §9.4 — "output must be translatable... Do not translate quoted
-   clause text — show the original and the translation together." The
-   English original (claim.text, in the always-visible claim head) is
-   never replaced, only supplemented. */
+   clause text — show the original and the translation together." Every
+   piece of GENERATED explanatory text (the overall summary, each claim's
+   own statement, each follow-up question) is translatable this way — a
+   quoted clause/evidence quote never is, since §9.4 forbids touching that.
+
+   One shared implementation used by both the per-piece button next to
+   each claim/question and the page-level "Translate everything" toggle
+   (setupTranslateAll), so there is exactly one place that decides what
+   "translated" looks like — never two divergent renderings of the same
+   Hindi text.
+*/
 const HINDI_TOGGLE_LABEL = "Translate to Hindi · हिंदी में देखें";
 
-function renderHindiToggle(claim) {
+/** Builds a small, self-contained translate control: optionally a button
+ * (skip it with `showButton: false` where a page-level toggle already
+ * covers this piece — the overall summary, sitting right next to the
+ * global "Translate everything" button, doesn't need its own redundant
+ * one too), plus the block its translation appears in once fetched.
+ * Returns `{ element, translate }` — `element` is what to insert into the
+ * page, `translate()` is the same action the button performs, exposed so
+ * a page-level "translate everything" control can trigger every piece at
+ * once without re-clicking each one individually. Idempotent: calling
+ * `translate()` again (including via the button) just re-shows an
+ * already-fetched translation instead of re-fetching it.
+ */
+function createTranslator(getSourceText, { showButton = true } = {}) {
   const wrap = document.createElement("div");
-  const button = document.createElement("button");
-  button.type = "button";
-  button.className = "hindi-toggle";
-  button.textContent = HINDI_TOGGLE_LABEL;
-
+  let button = null;
   let block = null;
-  button.addEventListener("click", async () => {
+
+  async function translate() {
     if (block) {
-      block.hidden = !block.hidden;
-      button.textContent = block.hidden ? HINDI_TOGGLE_LABEL : "Hide Hindi translation";
+      block.hidden = false;
+      if (button) button.textContent = "Hide Hindi translation";
       return;
     }
-    button.disabled = true;
+    const text = getSourceText();
+    if (!text) return;
+    if (button) button.disabled = true;
     try {
-      const res = await postJSON("/api/translate", { text: claim.text });
+      const res = await postJSON("/api/translate", { text });
       block = document.createElement("div");
       block.className = "hindi-block";
       const label = document.createElement("span");
@@ -482,16 +521,61 @@ function renderHindiToggle(claim) {
       translated.textContent = res.translation;
       block.append(label, translated);
       wrap.appendChild(block);
-      button.textContent = "Hide Hindi translation";
+      if (button) button.textContent = "Hide Hindi translation";
     } catch (err) {
-      button.textContent = `Hindi unavailable (${err.message || err})`;
+      if (button) button.textContent = `Hindi unavailable (${err.message || err})`;
+      throw err;
     } finally {
-      button.disabled = false;
+      if (button) button.disabled = false;
     }
-  });
+  }
 
-  wrap.appendChild(button);
-  return wrap;
+  if (showButton) {
+    button = document.createElement("button");
+    button.type = "button";
+    button.className = "hindi-toggle";
+    button.textContent = HINDI_TOGGLE_LABEL;
+    button.addEventListener("click", () => {
+      if (block && !block.hidden) {
+        block.hidden = true;
+        button.textContent = HINDI_TOGGLE_LABEL;
+        return;
+      }
+      translate();
+    });
+    wrap.appendChild(button);
+  }
+
+  return { element: wrap, translate };
+}
+
+function renderHindiToggle(claim) {
+  const translator = createTranslator(() => claim.text);
+  translateAllTargets.push(translator.translate);
+  return translator.element;
+}
+
+function updateTranslateAllLabel() {
+  const button = el("translate-all");
+  button.textContent =
+    translateAllTargets.length > 0
+      ? `Translate everything on this page to Hindi (${translateAllTargets.length} items)`
+      : "Translate to Hindi";
+  button.disabled = translateAllTargets.length === 0;
+}
+
+function setupTranslateAll() {
+  const button = el("translate-all");
+  updateTranslateAllLabel();
+  button.addEventListener("click", async () => {
+    button.disabled = true;
+    button.textContent = "Translating…";
+    // Settled rather than all() — one failed piece (e.g. a transient
+    // Gemini error) should not stop the rest from showing their
+    // translations; each already surfaces its own error inline.
+    await Promise.allSettled(translateAllTargets.map((translate) => translate()));
+    updateTranslateAllLabel();
+  });
 }
 
 function renderEvidence(evidence) {

@@ -330,6 +330,8 @@ button.secondary:disabled { opacity: 0.55; cursor: progress; }
 
 .questions { margin: 0; padding-left: 20px; display: flex; flex-direction: column; gap: 8px; }
 .questions li { font-size: 15px; }
+.questions li .hindi-toggle { margin-top: 4px; }
+.questions li .hindi-block { font-size: 13px; }
 
 /* §8's UI-mapping table: a NEEDS_INFORMATION claim must "name the missing
    input, offer to accept it" — an actual field per input, not a read-only
@@ -395,6 +397,27 @@ button.secondary:disabled { opacity: 0.55; cursor: progress; }
   cursor: pointer;
   text-decoration: underline;
 }
+.hindi-toggle:disabled { opacity: 0.5; cursor: default; }
+
+/* The page-level toggle in the Overall panel — one click translates the
+   summary, every claim, and every question, rather than clicking each
+   piece's own button individually. Styled apart from the per-piece
+   underlined-text buttons so it reads as the "do everything" control. */
+.hindi-toggle-all {
+  display: block;
+  margin-top: 12px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--accent);
+  background: var(--info-bg);
+  border: 1px solid var(--info);
+  border-radius: 8px;
+  padding: 8px 14px;
+  cursor: pointer;
+  text-decoration: none;
+}
+.hindi-toggle-all:hover { background: #ddeaf9; }
+.hindi-toggle-all:disabled { opacity: 0.6; cursor: default; }
 .hindi-block {
   margin-top: 8px;
   padding: 8px 12px;
