@@ -559,6 +559,27 @@ source question needs the project owner's input (see the feasibility memo's
 verification) work has proceeded ahead of M0's full completion regardless,
 since neither depends on SPIKE-2 or the eval set.*
 
+*Update, same day (later pass): a replacement candidate was found and
+first-pass sampled — NCDRC and State Consumer Commission judgments
+(`docs/corpus/ncdrc-feasibility.md`). Unlike the ombudsman archive, this
+one has a real statutory basis for reuse (Copyright Act, 1957, §52(1)(q)(iv)
+exempts reproduction of tribunal judgments unless the tribunal itself
+prohibits it — checked as an actual provision, not assumed), verified
+against both the official government judgment portal
+(`confonet.nic.in`/`ncdrc.nic.in`) and a third-party mirror
+(`indiankanoon.org`), neither of which restricts reuse the way cioins.co.in
+did. 8 of 10 sampled cases (pulled via plain keyword search, not even a
+curated starting point) are directly usable, covering every hero-scenario
+category this project needs — room-rent/proportionate-deduction, co-payment,
+pre-existing-disease/waiting-period, and a genuinely sharp adversarial case
+(Jacob Punnen v. United India Insurance, decided by the Supreme Court) about
+an insurer silently changing a sub-limit clause at renewal, directly on
+point for this project's own §9.3 continuity concerns. Not yet a full
+20-case classification — that, plus a hunt for the two structures the
+policy-document corpus itself is still missing (room-category eligibility,
+pure flat-₹/day cap), is the concrete next step before this can be called
+resolved rather than promising.*
+
 **M1 — Intake and extraction with provenance.**
 Classification (§9.1), segmentation, span store, field extraction for the hero
 scenario's fields plus sum insured, policy period, waiting periods, co-pay,
@@ -910,7 +931,7 @@ summarised in prose by the drafter.*
 | ID | Question | Gates | Status |
 |---|---|---|---|
 | SPIKE-1 | IRDAI position on proportionate deduction, with dates | M5 | PARTIALLY RESOLVED (2026-09-14) — see `/docs/regulatory/proportionate-deduction.md` |
-| SPIKE-2 | Ombudsman corpus feasibility | M0, all evaluation | RESOLVED — NOT CLEARED (2026-09-15) — see `/docs/corpus/ombudsman-feasibility.md`; archive found and is high-quality, but cioins.co.in's own Disclaimer and Terms & Conditions explicitly prohibit copying/redistribution/derivative works with no research-use exception. The eval set needs a different source; do not build on this archive. |
+| SPIKE-2 | Ombudsman corpus feasibility | M0, all evaluation | Ombudsman archive RESOLVED — NOT CLEARED (2026-09-15) — see `/docs/corpus/ombudsman-feasibility.md`; cioins.co.in's Disclaimer/T&C explicitly prohibit copying/use of site content, no research-use exception. Replacement candidate found same day: NCDRC/State Consumer Commission judgments, PROMISING (first-pass sample done, not yet the full 20-case set) — see `/docs/corpus/ncdrc-feasibility.md`. Real statutory basis (Copyright Act §52(1)(q)(iv) exempts tribunal judgments), checked directly against confonet.nic.in/ncdrc.nic.in and indiankanoon.org, neither of which restricts reuse. 8/10 sampled cases usable, covering every hero-scenario category. Not yet fully resolved — needs the full 20-case classification. |
 | SPIKE-3 | Retrieval stack | M2 | RESOLVED (2026-09-14) — see `/docs/spikes/retrieval-stack.md` |
 | SPIKE-4 | Second output language and when | Post-MVP | PARTIALLY RESOLVED (2026-09-14) — see `/docs/spikes/translation-language.md`. Language (Hindi) and mechanism (translate only the final verified answer text, via Gemini — tested against Ollama and found clearly better for this role) are decided; "when" (which milestone ships it in the UI) is still open since no frontend exists yet. |
 | SPIKE-5 | Model choice per role — drafting and verification need not be the same model, and the verifier arguably should be cheaper and dumber | M3 | PARTIALLY RESOLVED (2026-09-14) — `decoder/llm/interface.py`'s `LLMClient` now has two real, working implementations (`ollama_client.py`, local, no key; `gemini_client.py`, cloud, needs `GEMINI_API_KEY`) plus two documented stubs (`anthropic_client.py`, `openai_client.py`, unwired pending keys) — any package can use any provider per role without changing its own code. Which specific model(s) to use per role (drafter vs. verifier, and which provider) is still open. |
