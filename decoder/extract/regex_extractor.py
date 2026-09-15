@@ -7,14 +7,16 @@ the UIN (always printed verbatim, unambiguous format) and the two numeric
 room-rent cap components (percent-of-SI and flat-amount) when explicitly
 stated in a room-rent-mentioning clause.
 
-Deliberately NOT implemented here (left to LLM-based extraction once
-decoder.reason/decoder.verify are wired against decoder.llm.ollama_client):
-room-CATEGORY eligibility (e.g. "single private AC room" — too much
-phrasing variety to regex safely), waiting periods, co-pay, and the
-carve-out/associated-medical-expenses list. Regex-guessing those risks
-exactly the "wrong number with a correct-looking citation" failure §1 of
-the handover calls out as worse than no answer — safer to return
-INSUFFICIENT_EVIDENCE via resolve() than to fabricate a pattern match.
+Deliberately NOT implemented here: room-CATEGORY eligibility (e.g. "single
+private AC room" — too much phrasing variety to regex safely), waiting
+periods, and co-pay — now covered by decoder.extract.llm_extractor
+instead. The carve-out/associated-medical-expenses list is not implemented
+anywhere yet (list-valued, needs a SPIKE-6 schema decision — see
+decoder.extract.llm_extractor's module docstring). Regex-guessing any of
+these risks exactly the "wrong number with a correct-looking citation"
+failure §1 of the handover calls out as worse than no answer — safer to
+return INSUFFICIENT_EVIDENCE via resolve() than to fabricate a pattern
+match.
 
 Verified empirically against the real starter corpus (2026-09-14): Easy
 Health and Optima Restore's policy wordings contain no explicit numeric

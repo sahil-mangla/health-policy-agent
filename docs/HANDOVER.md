@@ -560,11 +560,46 @@ deterministic (regex) implementation for the mechanically-safe fields only
 (UIN, explicit numeric room-rent caps — `decoder/extract/regex_extractor.py`),
 verified against all three real policy wordings, including a genuine
 compound-formula case (Arogya Sanjeevani's "2% of SI, capped at ₹5000/day").
-The remaining fields (waiting periods, co-pay, room-category eligibility,
-the carve-out list) need LLM-based structured extraction, not yet built —
-blocked on `decoder/reason`/`decoder/verify` being wired against
-`decoder/llm/ollama_client.py`. Extraction metrics/CI and the annotated set
-are not started (still blocked on SPIKE-2).*
+
+As of 2026-09-15, waiting periods (initial, PED, specific-illness) and
+co-payment also have a real LLM-based implementation
+(`decoder/extract/llm_extractor.py`), now that `decoder/reason`/
+`decoder/verify` are wired against a real LLM client (M3 status, below).
+It deliberately does not trust the model with the number itself: the model's
+only job, isolated to ONE field definition and ONE span at a time (mirroring
+`decoder/verify/entailment.py`'s isolation), is to say whether that span
+states the field's value and quote the exact words that do; the quote must
+be verbatim-in-span (`decoder/verify/span_containment.py`) or it's
+discarded, and the actual number is then parsed out of that verified quote
+by a field-specific regex in code — a hallucinated digit in the quote fails
+the regex and the span is dropped, not trusted. Verified by hand against
+live Ollama (qwen2.5-coder:7b) across four different real documents/insurers
+(HDFC ERGO, Star Health): co-payment (5% and, separately, a 10%
+senior-citizen co-pay), a 36-month PED waiting period, a 30-day initial
+waiting period (two independently-phrased documents), a 24-month
+specific-illness waiting period.
+
+Room-category eligibility is also implemented, but with no real positive
+example anywhere in the starter corpus to verify it against (confirmed:
+none of the corpus documents state an explicit room-category eligibility
+clause — corpus/README.md's own "still needed" list already flagged this
+gap). Building it caught a real false-positive before it shipped: the
+model first matched a *definition* clause ("Def. 17 Single occupancy ...
+means a Hospital room with only one patient bed") as if it were an
+eligibility statement. Fixed by tightening the field's prompt to explicitly
+exclude definition-shaped clauses; a regression test for exactly this case
+is in `tests/extract/test_llm_extractor.py`. Still needs a real corpus
+document with a room-category clause before it can be called verified
+rather than just implemented.
+
+The proportionate-deduction carve-out list is still NOT implemented
+anywhere — it's list-valued and `ExtractedField.value` is scalar
+(`str | int | float | bool | None`); extending that is a schema decision
+(SPIKE-6, still NOT STARTED) rather than one made unilaterally inside an
+extractor module.
+
+Extraction metrics/CI and the annotated set are not started (still blocked
+on SPIKE-2).*
 
 **M2 — Retrieval.**
 Hybrid retrieval over policy and CIS. Regulatory corpus stubbed.

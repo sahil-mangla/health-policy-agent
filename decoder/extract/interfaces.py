@@ -1,11 +1,12 @@
 """Field extraction with provenance — docs/HANDOVER.md §6.
 
 decoder.extract.regex_extractor.RegexFieldExtractor is a real implementation
-for the mechanically-safe fields (UIN, explicit numeric room-rent caps). The
-remaining fields (waiting periods, co-pay, room-category eligibility, the
-carve-out list) need LLM-based structured extraction — blocked on
-decoder.reason/decoder.verify being wired against decoder.llm.ollama_client,
-and on SPIKE-6 (final policy schema beyond the hero fields). See §14 M1.
+for the mechanically-safe fields (UIN, explicit numeric room-rent caps).
+decoder.extract.llm_extractor.LLMFieldExtractor covers waiting periods,
+co-payment, and room-category eligibility. The proportionate-deduction
+carve-out list is still not implemented anywhere — it is list-valued and
+needs a schema decision (SPIKE-6, final policy schema beyond the hero
+fields, still NOT STARTED per §15). See §14 M1.
 """
 
 from __future__ import annotations
