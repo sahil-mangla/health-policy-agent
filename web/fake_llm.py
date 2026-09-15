@@ -63,9 +63,7 @@ class FakeEmbeddingModel:
 
     _DIM = 16
 
-    def encode(
-        self, texts: list[str], normalize_embeddings: bool = True
-    ) -> NDArray[np.float32]:
+    def encode(self, texts: list[str], normalize_embeddings: bool = True) -> NDArray[np.float32]:
         vectors = np.array([self._vector(text) for text in texts], dtype=np.float32)
         if normalize_embeddings:
             norms = np.linalg.norm(vectors, axis=1, keepdims=True)

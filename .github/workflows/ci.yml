@@ -21,11 +21,11 @@ jobs:
           enable-cache: true
 
       - name: Install dependencies
-        # No --all-extras: the `dense` extra (sentence-transformers/torch) is
-        # deliberately deferred (decoder/retrieve/dense.py is a stub blocked
-        # on the SPIKE-2 corpus, see docs/spikes/retrieval-stack.md) — pulling
-        # torch into every CI run would be pure waste until something
-        # actually imports it.
+        # sentence-transformers/torch (dense retrieval — decoder/retrieve/
+        # dense.py) moved from an optional `dense` extra to a real
+        # dependency once dense.py went from stub to real (2026-09-15, see
+        # docs/spikes/retrieval-stack.md) — `uv sync` now installs it as
+        # part of the normal dependency set, no --all-extras needed.
         run: uv sync --locked --group dev
 
       - name: Install Chromium for browser tests

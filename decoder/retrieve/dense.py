@@ -41,9 +41,7 @@ _QUERY_INSTRUCTION = "Represent this sentence for searching relevant passages: "
 
 
 class EmbeddingModel(Protocol):
-    def encode(
-        self, texts: list[str], normalize_embeddings: bool = ...
-    ) -> NDArray[np.float32]: ...
+    def encode(self, texts: list[str], normalize_embeddings: bool = ...) -> NDArray[np.float32]: ...
 
 
 def load_default_model() -> EmbeddingModel:

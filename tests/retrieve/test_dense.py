@@ -22,9 +22,7 @@ class _FakeModel:
     def __init__(self, vectors: dict[str, tuple[float, float]]) -> None:
         self._vectors = vectors
 
-    def encode(
-        self, texts: list[str], normalize_embeddings: bool = True
-    ) -> NDArray[np.float32]:
+    def encode(self, texts: list[str], normalize_embeddings: bool = True) -> NDArray[np.float32]:
         raw = np.array([self._vectors[t] for t in texts], dtype=np.float32)
         if normalize_embeddings:
             norms = np.linalg.norm(raw, axis=1, keepdims=True)
